@@ -97,6 +97,7 @@ val supportedPlugins: Set<String> = setOf(
     "AndroidXComposePlugin",
     "com.android.library",
     "com.android.application",
+    "java-library",
     "org.jetbrains.kotlin.android",
     "org.jetbrains.kotlin.jvm",
     "kotlin", // alias for org.jetbrains.kotlin.jvm
