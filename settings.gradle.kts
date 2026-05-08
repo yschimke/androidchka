@@ -18,6 +18,16 @@ pluginManagement {
         id("org.jetbrains.kotlin.jvm") version "2.3.20"
         id("org.jetbrains.kotlin.plugin.compose") version "2.3.20"
     }
+    // Some upstream build files still use the legacy `id("kotlin")` shorthand. There's no
+    // corresponding plugin marker artifact (`kotlin` isn't a real plugin id on the portal),
+    // so route the request to `kotlin-gradle-plugin`, which contains the alias.
+    resolutionStrategy {
+        eachPlugin {
+            if (requested.id.id == "kotlin") {
+                useModule("org.jetbrains.kotlin:kotlin-gradle-plugin:2.3.20")
+            }
+        }
+    }
 }
 
 val snapshotProps = Properties().apply {
@@ -102,22 +112,51 @@ val unsupportedDslMarkers = mapOf<String, String>(
 )
 
 /**
- * Read upstream's `settings.gradle` once to map directory paths back to the canonical Gradle
+ * Parse upstream's `settings.gradle` once to map directory paths back to the canonical Gradle
  * project paths upstream uses (e.g. `wear/compose/remote/remote-material3/samples` is at
  * `:wear:compose:remote:remote-material3-samples`, not `:...:remote-material3:samples`). Used
  * by [expandSource] so recursive auto-discovery matches what `project(":...")` references in
- * upstream build files expect.
+ * upstream build files expect, and by [autoSourceForPath] to find directories of common
+ * unpublished internals like `:internal-testutils-*`.
  */
-val upstreamProjectPaths: Map<String, String> = run {
+val upstreamPathToDir: Map<String, String> = run {
     val upstreamSettings = File(androidxRoot, "settings.gradle")
-    if (!upstreamSettings.isFile) emptyMap()
-    else {
-        val rx = Regex("""includeProject\(\s*["'](:[^"']+)["']\s*,\s*["']([^"']+)["']""")
-        upstreamSettings.readText().lineSequence()
-            .flatMap { rx.findAll(it) }
-            .associate { it.groupValues[2] to it.groupValues[1] }
+    if (!upstreamSettings.isFile) return@run emptyMap()
+    val withDir = Regex("""includeProject\(\s*["'](:[^"']+)["']\s*,\s*["']([^"']+)["']""")
+    val noDir = Regex("""includeProject\(\s*["'](:[^"']+)["']\s*[,)]""")
+    val text = upstreamSettings.readText()
+    val map = LinkedHashMap<String, String>()
+    // First pass: explicit dir mappings (paths whose dir doesn't follow the `:` -> `/` rule).
+    withDir.findAll(text).forEach { map[it.groupValues[1]] = it.groupValues[2] }
+    // Second pass: single-arg includes default to the path-derived directory.
+    noDir.findAll(text).forEach { m ->
+        val path = m.groupValues[1]
+        map.getOrPut(path) { path.removePrefix(":").replace(':', '/') }
     }
+    map
 }
+val upstreamDirToPath: Map<String, String> = upstreamPathToDir.entries.associate { it.value to it.key }
+
+/**
+ * Common upstream projects that are widely referenced as `project(":x")` deps but are *not
+ * published* to androidx.dev (they're internal/test/sampled). Promoting them from stub to
+ * source automatically saves users from having to enumerate them in `local.properties`.
+ *
+ * Additions need three properties: (1) referenced often, (2) unpublished (else a snapshot
+ * substitution would just work), (3) builds with the plugins/DSL the overlay supports.
+ */
+val autoSourcePaths: Set<String> = setOf(
+    // Trivial pure-JVM annotation provider; widely used by samples.
+    ":annotation:annotation-sampled",
+    // Internal test infrastructure — pure JVM/AGP, no exotic DSL, all `INTERNAL_TEST_LIBRARY`.
+    ":internal-testutils-common",
+    ":internal-testutils-runtime",
+    ":internal-testutils-truth",
+    ":internal-testutils-benchmark-macro",
+    // `:compose:test-utils` and `:compose:benchmark-utils` are heavily referenced but use KMP
+    // targets (`desktop()`, `androidHostTest`) the overlay's KMP shim doesn't fake yet — they
+    // stay as snapshot-resolved stubs.
+)
 
 /**
  * Expands a source spec to one or more `source()` calls. If the target directory has its own
@@ -136,7 +175,7 @@ fun expandSource(path: String, dir: File) {
         .map { File(dir, it) }
         .firstOrNull { it.isFile }
     if (buildScript != null) {
-        val canonicalPath = upstreamProjectPaths[dir.relativeTo(androidxRoot).path] ?: path
+        val canonicalPath = upstreamDirToPath[dir.relativeTo(androidxRoot).path] ?: path
         val text = buildScript.readText()
         val reason: String? =
             unsupportedDslMarkers.entries.firstOrNull { it.key in text }?.value
@@ -190,25 +229,47 @@ fun stub(path: String) {
     assignProjectDirs(path, leafDir)
 }
 
-// Auto-populate stubs by scanning each source project's build.gradle for `project(":path")`
-// references. The regex covers both `project(":x")` and `project(path: ":x")` forms with
-// either quote style. Matches inside line comments are stripped first to cut false positives;
-// block comments are rare enough in androidx build files that we don't bother.
+// Discover referenced project paths by scanning each source's build.gradle. The regex covers
+// both `project(":x")` and `project(path: ":x")` forms; line comments are stripped first to
+// cut false positives.
 val projectRefRegex = Regex("""project\s*\(\s*(?:path\s*[:=]\s*)?["'](:[A-Za-z0-9:_\-]+)["']""")
 val lineCommentRegex = Regex("""(?m)//[^\n]*""")
-val referenced = linkedSetOf<String>()
-for (path in sourceProjects) {
-    val projectDir = project(path).projectDir
-    val gradleFile = sequenceOf("build.gradle.kts", "build.gradle")
-        .map { File(projectDir, it) }
-        .firstOrNull { it.isFile } ?: continue
-    val source = gradleFile.readText().replace(lineCommentRegex, "")
-    referenced += projectRefRegex.findAll(source).map { it.groupValues[1] }
+val autoPromoted = linkedSetOf<String>()
+fun collectReferenced(): Set<String> = buildSet {
+    for (path in sourceProjects) {
+        val projectDir = project(path).projectDir
+        val gradleFile = sequenceOf("build.gradle.kts", "build.gradle")
+            .map { File(projectDir, it) }
+            .firstOrNull { it.isFile } ?: continue
+        val source = gradleFile.readText().replace(lineCommentRegex, "")
+        addAll(projectRefRegex.findAll(source).map { it.groupValues[1] })
+    }
 }
-val toStub = referenced - sourceProjects
+
+// Iterate to a fixpoint: a newly-promoted source can itself reference more `autoSourcePaths`
+// entries that weren't visible yet. Two iterations is usually enough for the curated set.
+while (true) {
+    val referenced = collectReferenced()
+    val toPromote = referenced.intersect(autoSourcePaths) - sourceProjects
+    if (toPromote.isEmpty()) break
+    for (path in toPromote.sorted()) {
+        val relativeDir = upstreamPathToDir[path]
+            ?: error("autoSourcePaths entry $path has no upstream directory mapping")
+        expandSource(path, File(androidxRoot, relativeDir))
+        autoPromoted += path
+    }
+}
+
+// Whatever's still referenced but isn't a source becomes a stub.
+val finalReferenced = collectReferenced()
+val toStub = finalReferenced - sourceProjects
 toStub.sorted().forEach(::stub)
+
 gradle.rootProject {
     logger.lifecycle("[androidchka] sources (${sourceProjects.size}): ${sourceProjects.toList()}")
+    if (autoPromoted.isNotEmpty()) {
+        logger.lifecycle("[androidchka] auto-promoted (${autoPromoted.size}): ${autoPromoted.toList()}")
+    }
     logger.lifecycle("[androidchka] auto-stubs (${toStub.size}): ${toStub.sorted()}")
     if (skippedSources.isNotEmpty()) {
         logger.lifecycle("[androidchka] skipped sources (${skippedSources.size}): " +

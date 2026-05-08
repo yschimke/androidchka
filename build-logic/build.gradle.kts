@@ -1,5 +1,15 @@
+import java.util.Properties
+
 plugins {
     `kotlin-dsl`
+}
+
+/** Read a property from the overlay root's `gradle.properties` (one level above build-logic). */
+fun overlayProperty(name: String): String {
+    val props = Properties().apply {
+        rootDir.parentFile.resolve("gradle.properties").inputStream().use { load(it) }
+    }
+    return props.getProperty(name) ?: error("'$name' missing from overlay gradle.properties")
 }
 
 repositories {
@@ -20,9 +30,9 @@ dependencies {
     implementation("org.jetbrains.kotlin:compose-compiler-gradle-plugin:${libs.versions.composeCompilerPlugin.get()}")
 
     // --- Extras: plugin marker artifacts referenced from `androidchka.extras.gradle.kts`.
-    // Pin one line per plugin (`<id>:<id>.gradle.plugin:<version>`); the precompiled script
-    // plugin then refers to the id only.
-    implementation("ee.schimke.composeai.preview:ee.schimke.composeai.preview.gradle.plugin:0.10.4")
+    // Versions live in the overlay's `gradle.properties` (build-logic is an included build, so
+    // its own rootProject doesn't see the overlay's properties — we read them explicitly).
+    implementation("ee.schimke.composeai.preview:ee.schimke.composeai.preview.gradle.plugin:${overlayProperty("composeAiPreviewVersion")}")
 }
 
 gradlePlugin {
