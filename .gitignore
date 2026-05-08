@@ -1,0 +1,13 @@
+.gradle/
+local.properties
+.idea/
+*.iml
+.kotlin/
+bin/
+
+# Gradle output directories — anchored so they don't match `androidx/build/` package dirs.
+/build/
+/build-logic/build/
+
+# Stub project directories are recreated on demand by settings.gradle.kts
+stubs/
