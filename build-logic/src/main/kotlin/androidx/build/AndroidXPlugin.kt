@@ -22,6 +22,7 @@ import java.util.Properties
 class AndroidXPlugin : Plugin<Project> {
     override fun apply(project: Project) {
         project.extensions.create<AndroidXExtension>("androidx", project)
+        project.extensions.create<AndroidXMultiplatformExtension>("androidXMultiplatform", project)
 
         // The `plugins {}` block in upstream build files applies `AndroidXPlugin` before
         // `com.android.library`, so configure AGP lazily once it shows up. AGP 9.x bundles

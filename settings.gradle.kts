@@ -46,10 +46,96 @@ rootProject.name = "androidx-mini"
 val androidxRoot: File = file("androidx")
 val sourceProjects = linkedSetOf<String>()
 
+// Gradle implicitly materializes every parent of a nested path (`:wear:compose:remote:foo`
+// pulls in `:wear`, `:wear:compose`, `:wear:compose:remote`) and demands each have a real
+// projectDir. Walk every prefix; pin the leaf to its assigned dir, and pin parents to the
+// matching `androidx/<path>` if it exists, else to a placeholder under `stubs/`.
+fun assignProjectDirs(path: String, leafDir: File) {
+    val segments = path.removePrefix(":").split(":")
+    for ((i, _) in segments.withIndex()) {
+        val currentPath = ":${segments.take(i + 1).joinToString(":")}"
+        val proj = project(currentPath)
+        val isLeaf = i == segments.size - 1
+        if (isLeaf) {
+            // Always pin the leaf — once a parent is set, Gradle resolves the leaf's default
+            // relative to it, which can point at a real upstream project we explicitly want
+            // stubbed (e.g. parent at androidx/benchmark + leaf default at
+            // androidx/benchmark/benchmark-macro-junit4 with its own build.gradle).
+            proj.projectDir = leafDir
+        } else if (!proj.projectDir.isDirectory) {
+            // Parent: first-write-wins, only assign if not already pointed at a real dir.
+            val androidxDir = File(androidxRoot, segments.take(i + 1).joinToString("/"))
+            proj.projectDir = if (androidxDir.isDirectory) androidxDir
+                else file("stubs/${currentPath.removePrefix(":").replace(':', '-')}").apply { mkdirs() }
+        }
+    }
+}
+
 fun source(path: String, relativeProjectDir: String) {
     include(path)
-    project(path).projectDir = File(androidxRoot, relativeProjectDir)
+    assignProjectDirs(path, File(androidxRoot, relativeProjectDir))
     sourceProjects += path
+}
+
+val skippedSources = linkedMapOf<String, String>()
+
+// Plugins the overlay knows how to satisfy — either provided by build-logic, pinned in the
+// pluginManagement.plugins block above, or wired via `androidchka.extras.gradle.kts`. Anything
+// outside this set causes a project to be demoted to a stub.
+val supportedPlugins: Set<String> = setOf(
+    "AndroidXPlugin",
+    "AndroidXComposePlugin",
+    "com.android.library",
+    "com.android.application",
+    "org.jetbrains.kotlin.android",
+    "org.jetbrains.kotlin.jvm",
+    "org.jetbrains.kotlin.plugin.compose",
+    "androidchka.extras",
+    "ee.schimke.composeai.preview",
+)
+val pluginIdRegex = Regex("""\b(?:id|alias)\s*\(\s*["']([^"']+)["']""")
+val unsupportedDslMarkers = mapOf<String, String>(
+    // KMP is handled via AndroidXMultiplatformExtension (build-logic). Add markers here for any
+    // other DSL we don't satisfy (e.g. AGP test plugin "com.android.test" handled by plugin-id
+    // filter below).
+)
+
+/**
+ * Expands a source spec to one or more `source()` calls. If the target directory has its own
+ * build script it's used directly. Otherwise we recurse into child directories and pick up
+ * every nested project with a build script — supports specs like `:compose:remote` that name
+ * the upstream group rather than each leaf.
+ *
+ * Projects that reference DSL or plugin ids the overlay doesn't satisfy are demoted to stubs
+ * so the rest of the build can still configure; they're surfaced in `skippedSources` and
+ * logged once Gradle has the root project.
+ */
+fun expandSource(path: String, dir: File) {
+    if (!dir.isDirectory) error("source path '$path' resolves to non-existent dir $dir")
+    val buildScript = sequenceOf("build.gradle", "build.gradle.kts")
+        .map { File(dir, it) }
+        .firstOrNull { it.isFile }
+    if (buildScript != null) {
+        val text = buildScript.readText()
+        val reason: String? =
+            unsupportedDslMarkers.entries.firstOrNull { it.key in text }?.value
+                ?: pluginIdRegex.findAll(text)
+                    .map { it.groupValues[1] }
+                    .firstOrNull { it !in supportedPlugins }
+                    ?.let { "plugin: $it" }
+        if (reason != null) {
+            skippedSources[path] = reason
+            stub(path)
+        } else {
+            source(path, dir.relativeTo(androidxRoot).path)
+        }
+        return
+    }
+    val children = dir.listFiles { f -> f.isDirectory && !f.name.startsWith(".") }.orEmpty()
+        .sortedBy { it.name }
+    for (child in children) {
+        expandSource("$path:${child.name}", child)
+    }
 }
 
 // `androidx.sources` from local.properties (per-clone, git-ignored), falling back to
@@ -68,7 +154,7 @@ sourceSpec.split(",").map(String::trim).filter(String::isNotEmpty).forEach { ent
     val path = if (eqIdx >= 0) entry.substring(0, eqIdx).trim() else entry
     val relativeDir = if (eqIdx >= 0) entry.substring(eqIdx + 1).trim()
                       else path.removePrefix(":").replace(':', '/')
-    source(path, relativeDir)
+    expandSource(path, File(androidxRoot, relativeDir))
 }
 
 // --- Stub projects: referenced by source projects but resolved to androidx.dev artifacts.
@@ -76,20 +162,11 @@ sourceSpec.split(",").map(String::trim).filter(String::isNotEmpty).forEach { ent
 // Each stub must exist as a Gradle project so `project(":x")` lookups in upstream build.gradle
 // files don't fail at configuration time. The AndroidXPlugin's `dependencySubstitution.all { }`
 // rule then swaps the project dependency for a Maven coordinate at resolution time.
-//
-// Gradle implicitly materializes every parent of a nested path (`:test:screenshot:screenshot`
-// pulls in `:test` and `:test:screenshot`) and demands each have a real projectDir, so we walk
-// every prefix and assign it a placeholder dir under stubs/.
 fun stub(path: String) {
     include(path)
-    val segments = path.removePrefix(":").split(":")
-    var current = ""
-    for (segment in segments) {
-        current = if (current.isEmpty()) ":$segment" else "$current:$segment"
-        val dirName = current.removePrefix(":").replace(':', '-')
-        val dir = file("stubs/$dirName").apply { mkdirs() }
-        project(current).projectDir = dir
-    }
+    val dirName = path.removePrefix(":").replace(':', '-')
+    val leafDir = file("stubs/$dirName").apply { mkdirs() }
+    assignProjectDirs(path, leafDir)
 }
 
 // Auto-populate stubs by scanning each source project's build.gradle for `project(":path")`
@@ -110,5 +187,10 @@ for (path in sourceProjects) {
 val toStub = referenced - sourceProjects
 toStub.sorted().forEach(::stub)
 gradle.rootProject {
-    logger.lifecycle("[androidchka] auto-stubs: ${toStub.size} -> ${toStub.sorted()}")
+    logger.lifecycle("[androidchka] sources (${sourceProjects.size}): ${sourceProjects.toList()}")
+    logger.lifecycle("[androidchka] auto-stubs (${toStub.size}): ${toStub.sorted()}")
+    if (skippedSources.isNotEmpty()) {
+        logger.lifecycle("[androidchka] skipped sources (${skippedSources.size}): " +
+            skippedSources.entries.joinToString { "${it.key} (${it.value})" })
+    }
 }
