@@ -89,6 +89,7 @@ val supportedPlugins: Set<String> = setOf(
     "com.android.application",
     "org.jetbrains.kotlin.android",
     "org.jetbrains.kotlin.jvm",
+    "kotlin", // alias for org.jetbrains.kotlin.jvm
     "org.jetbrains.kotlin.plugin.compose",
     "androidchka.extras",
     "ee.schimke.composeai.preview",
@@ -101,10 +102,29 @@ val unsupportedDslMarkers = mapOf<String, String>(
 )
 
 /**
+ * Read upstream's `settings.gradle` once to map directory paths back to the canonical Gradle
+ * project paths upstream uses (e.g. `wear/compose/remote/remote-material3/samples` is at
+ * `:wear:compose:remote:remote-material3-samples`, not `:...:remote-material3:samples`). Used
+ * by [expandSource] so recursive auto-discovery matches what `project(":...")` references in
+ * upstream build files expect.
+ */
+val upstreamProjectPaths: Map<String, String> = run {
+    val upstreamSettings = File(androidxRoot, "settings.gradle")
+    if (!upstreamSettings.isFile) emptyMap()
+    else {
+        val rx = Regex("""includeProject\(\s*["'](:[^"']+)["']\s*,\s*["']([^"']+)["']""")
+        upstreamSettings.readText().lineSequence()
+            .flatMap { rx.findAll(it) }
+            .associate { it.groupValues[2] to it.groupValues[1] }
+    }
+}
+
+/**
  * Expands a source spec to one or more `source()` calls. If the target directory has its own
- * build script it's used directly. Otherwise we recurse into child directories and pick up
- * every nested project with a build script — supports specs like `:compose:remote` that name
- * the upstream group rather than each leaf.
+ * build script it's used directly; we still recurse into subdirectories so nested projects
+ * (`samples`, etc.) get picked up. Each project's Gradle path is taken from upstream's
+ * `settings.gradle` when available so references like `project(":wear:compose:remote:remote-material3-samples")`
+ * resolve, with a fall-back to the directory-derived `:` path.
  *
  * Projects that reference DSL or plugin ids the overlay doesn't satisfy are demoted to stubs
  * so the rest of the build can still configure; they're surfaced in `skippedSources` and
@@ -116,6 +136,7 @@ fun expandSource(path: String, dir: File) {
         .map { File(dir, it) }
         .firstOrNull { it.isFile }
     if (buildScript != null) {
+        val canonicalPath = upstreamProjectPaths[dir.relativeTo(androidxRoot).path] ?: path
         val text = buildScript.readText()
         val reason: String? =
             unsupportedDslMarkers.entries.firstOrNull { it.key in text }?.value
@@ -124,12 +145,12 @@ fun expandSource(path: String, dir: File) {
                     .firstOrNull { it !in supportedPlugins }
                     ?.let { "plugin: $it" }
         if (reason != null) {
-            skippedSources[path] = reason
-            stub(path)
+            skippedSources[canonicalPath] = reason
+            stub(canonicalPath)
         } else {
-            source(path, dir.relativeTo(androidxRoot).path)
+            source(canonicalPath, dir.relativeTo(androidxRoot).path)
         }
-        return
+        // Fall through to recurse — subdirs may host nested projects (e.g. `samples`).
     }
     val children = dir.listFiles { f -> f.isDirectory && !f.name.startsWith(".") }.orEmpty()
         .sortedBy { it.name }

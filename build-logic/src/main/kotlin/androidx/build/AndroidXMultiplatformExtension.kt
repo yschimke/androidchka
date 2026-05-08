@@ -1,13 +1,14 @@
 package androidx.build
 
+import com.android.build.api.dsl.KotlinMultiplatformAndroidCompilation
 import com.android.build.api.dsl.KotlinMultiplatformAndroidLibraryTarget
 import groovy.lang.Closure
 import org.gradle.api.Action
 import org.gradle.api.Project
 import org.gradle.api.plugins.ExtensionAware
 import org.gradle.kotlin.dsl.getByType
+import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
-import org.jetbrains.kotlin.gradle.plugin.KotlinSourceSet
 
 /**
  * Slim replacement for the upstream `androidXMultiplatform { }` DSL. Wires up:
@@ -28,6 +29,22 @@ open class AndroidXMultiplatformExtension(internal val project: Project) {
         if (kmpApplied) return
         kmpApplied = true
         project.pluginManager.apply("org.jetbrains.kotlin.multiplatform")
+
+        // Customize the source-set hierarchy: insert `jvmAndAndroidMain` between `commonMain`
+        // and the `jvmMain` / `androidMain` leaves so build.gradle files can declare deps shared
+        // by jvm and android targets. `applyDefaultHierarchyTemplate` extends Kotlin's default
+        // wiring with our group; manual `dependsOn` calls would disable the default template and
+        // emit a warning. Match the AGP KMP target via `withCompilations { it is
+        // KotlinMultiplatformAndroidCompilation }` per upstream's workaround for b/442950553.
+        @OptIn(ExperimentalKotlinGradlePluginApi::class)
+        kotlin.applyDefaultHierarchyTemplate {
+            common {
+                group("jvmAndAndroid") {
+                    withJvm()
+                    withCompilations { it is KotlinMultiplatformAndroidCompilation }
+                }
+            }
+        }
     }
 
     private val kotlin: KotlinMultiplatformExtension
@@ -56,32 +73,25 @@ open class AndroidXMultiplatformExtension(internal val project: Project) {
         if (java.io.File(project.projectDir, "src/androidDeviceTest").isDirectory) {
             target.withDeviceTest { }
         }
-        scheduleHierarchyWiring()
     }
 
     /** Add a JVM target. Mirrors upstream `androidXMultiplatform { jvm() }`. */
     fun jvm() {
         kotlin.jvm()
-        scheduleHierarchyWiring()
     }
 
     fun jvm(block: Closure<*>) {
         kotlin.jvm { configure(this, block) }
-        scheduleHierarchyWiring()
     }
 
     /** No-op: upstream uses this to pick a publication's "default" platform; not needed here. */
     @Suppress("UNUSED_PARAMETER")
     fun defaultPlatform(id: PlatformIdentifier) { /* no-op */ }
 
-    /**
-     * Delegate to the kotlin extension's source sets. The `jvmAndAndroidMain` intermediate node
-     * is materialized eagerly so build files can reference it inside the `sourceSets { }`
-     * closure; the `dependsOn` wiring runs later once both targets exist.
-     */
+    /** Delegate to the kotlin extension's source sets. The `jvmAndAndroid` group is registered
+     *  by the hierarchy template applied in [ensureKmpApplied], so `jvmAndAndroidMain` exists
+     *  by the time this closure executes. */
     fun sourceSets(block: Closure<*>) {
-        kotlin.sourceSets.maybeCreate("jvmAndAndroidMain")
-        scheduleHierarchyWiring()
         configure(kotlin.sourceSets, block)
     }
 
@@ -89,25 +99,6 @@ open class AndroidXMultiplatformExtension(internal val project: Project) {
         block.delegate = target
         block.resolveStrategy = Closure.DELEGATE_FIRST
         block.call()
-    }
-
-    private var hierarchyScheduled = false
-    private fun scheduleHierarchyWiring() {
-        if (hierarchyScheduled) return
-        hierarchyScheduled = true
-        // Wire after both targets exist; safest spot is before configurations resolve.
-        @Suppress("DEPRECATION")
-        project.afterEvaluate {
-            val ss = kotlin.sourceSets
-            val common = ss.findByName("commonMain") ?: return@afterEvaluate
-            val jvm = ss.findByName("jvmMain")
-            val android = ss.findByName("androidMain")
-            if (jvm == null && android == null) return@afterEvaluate
-            val intermediate: KotlinSourceSet = ss.maybeCreate("jvmAndAndroidMain")
-            intermediate.dependsOn(common)
-            jvm?.dependsOn(intermediate)
-            android?.dependsOn(intermediate)
-        }
     }
 }
 
