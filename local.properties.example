@@ -1,0 +1,11 @@
+# Per-clone overlay configuration. Copy this file to `local.properties` and edit to taste.
+# `local.properties` is git-ignored; `local.properties.example` is committed and provides the
+# defaults used when no `local.properties` exists.
+#
+# androidx.sources: comma-separated Gradle project paths to build from the upstream androidx
+# checkout. The relative directory under `androidx/` is derived by replacing `:` with `/`,
+# unless an entry uses the `:path = relative/dir` form to override.
+#
+# Stubs for every other project referenced by these are auto-populated.
+
+androidx.sources=:wear:compose:remote:remote-material3,:compose:remote:remote-creation-compose

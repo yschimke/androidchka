@@ -51,8 +51,30 @@ fun source(path: String, relativeProjectDir: String) {
     sourceProjects += path
 }
 
-source(":wear:compose:remote:remote-material3", "wear/compose/remote/remote-material3")
-source(":compose:remote:remote-creation-compose", "compose/remote/remote-creation-compose")
+// Read `androidx.sources` from local.properties (per-clone, git-ignored) and fall back to
+// local.properties.example (committed defaults). Format: comma-separated project paths;
+// `:path = relative/dir` overrides the default `:` -> `/` mapping for an entry.
+val configFile = sequenceOf("local.properties", "local.properties.example")
+    .map(::file)
+    .firstOrNull { it.isFile }
+    ?: error("Neither local.properties nor local.properties.example found")
+val configProps = Properties().apply { configFile.inputStream().use(::load) }
+val sourceSpec = configProps.getProperty("androidx.sources")
+    ?: error("`androidx.sources` not set in $configFile")
+
+sourceSpec.split(",").map(String::trim).filter(String::isNotEmpty).forEach { entry ->
+    val path: String
+    val relativeDir: String
+    val eqIdx = entry.indexOf('=')
+    if (eqIdx >= 0) {
+        path = entry.substring(0, eqIdx).trim()
+        relativeDir = entry.substring(eqIdx + 1).trim()
+    } else {
+        path = entry
+        relativeDir = path.removePrefix(":").replace(':', '/')
+    }
+    source(path, relativeDir)
+}
 
 // --- Stub projects: referenced by source projects but resolved to androidx.dev artifacts.
 //

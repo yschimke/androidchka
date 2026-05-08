@@ -9,10 +9,14 @@ overlay-specific files live here.
 
 - `androidx` &mdash; symlink to `/home/yuri/workspace/androidx` (the upstream
   checkout). Build files are read from there directly.
-- `settings.gradle.kts` &mdash; declares the **source** projects (built from the
-  upstream tree). **Stubs are auto-populated** by scanning each source
-  project's `build.gradle` for `project(":path")` references — anything not
-  already a source becomes a stub. The list is logged at configuration:
+- `local.properties.example` &mdash; committed default `androidx.sources=...`
+  list (Gradle project paths to build from upstream).
+- `local.properties` &mdash; per-clone override, git-ignored. Copy from
+  `.example` and edit if you want a different subset.
+- `settings.gradle.kts` &mdash; reads the source list from `local.properties`
+  (or `.example` as fallback). **Stubs are auto-populated** by scanning each
+  source project's `build.gradle` for `project(":path")` references — anything
+  not already a source becomes a stub. The list is logged at configuration:
   `[androidchka] auto-stubs: N -> [...]`.
 - `build-logic/` &mdash; included build providing thin shims for the
   `AndroidXPlugin` / `AndroidXComposePlugin` plugin ids and the `androidx { }`
@@ -35,24 +39,23 @@ whether the target project lives under `stubs/`; if so it substitutes
 are listed in `SnapshotConfig.overrides` in
 [`AndroidXPlugin.kt`](build-logic/src/main/kotlin/androidx/build/AndroidXPlugin.kt).
 
-## What's wired up today
+## Configuring which projects to build
 
-Source projects:
-- `:wear:compose:remote:remote-material3`
-- `:compose:remote:remote-creation-compose`
+Edit `local.properties` (copy from `local.properties.example` if you don't
+have one yet):
 
-Stubs are derived automatically. At time of writing the scanner discovers 14
-of them, including the various `compose:remote:remote-*`, `compose:ui:ui-test`,
-`test:uiautomator:uiautomator`, etc.
+```properties
+androidx.sources=:wear:compose:remote:remote-material3,:compose:remote:remote-creation-compose
+```
 
-## Adding a project to the overlay (build from source)
+The relative directory under `androidx/` is derived by replacing `:` with
+`/`. Override with `:path = relative/dir/path` for the rare case where the
+project path doesn't match its directory.
 
-1. In `settings.gradle.kts`, add a `source(":x:y:z", "x/y/z")` line.
-2. Run any task — the scanner picks up new `project(":...")` references and
-   creates the stubs needed.
-3. If a stub's path doesn't follow the `:a:b:c` &rarr; `androidx.a.b:c`
-   convention, add an entry to `SnapshotConfig.overrides` in
-   [`AndroidXPlugin.kt`](build-logic/src/main/kotlin/androidx/build/AndroidXPlugin.kt).
+Stubs for everything those projects reference are generated automatically. If
+a stub's path doesn't follow the `:a:b:c` &rarr; `androidx.a.b:c` Maven
+convention, add an entry to `SnapshotConfig.overrides` in
+[`AndroidXPlugin.kt`](build-logic/src/main/kotlin/androidx/build/AndroidXPlugin.kt).
 
 ## Bumping the snapshot
 
