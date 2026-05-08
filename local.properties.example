@@ -9,3 +9,7 @@
 # Stubs for every other project referenced by these are auto-populated.
 
 androidx.sources=:wear:compose:remote:remote-material3,:compose:remote:remote-creation-compose
+
+# Extra Gradle config (additional plugins, dependencies, task tweaks) is applied via the
+# convention plugin at build-logic/src/main/kotlin/androidchka.extras.gradle.kts. Edit that
+# file directly — it's a normal Kotlin DSL build script.

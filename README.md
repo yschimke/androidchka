@@ -18,6 +18,9 @@ overlay-specific files live here.
   source project's `build.gradle` for `project(":path")` references — anything
   not already a source becomes a stub. The list is logged at configuration:
   `[androidchka] auto-stubs: N -> [...]`.
+- [`build-logic/src/main/kotlin/androidchka.extras.gradle.kts`](build-logic/src/main/kotlin/androidchka.extras.gradle.kts) &mdash;
+  user-editable convention plugin applied to every source project. Add extra
+  Gradle plugins, dependencies, task tweaks here.
 - `build-logic/` &mdash; included build providing thin shims for the
   `AndroidXPlugin` / `AndroidXComposePlugin` plugin ids and the `androidx { }`
   DSL extension. Just enough for upstream `build.gradle` files to apply
@@ -38,6 +41,22 @@ whether the target project lives under `stubs/`; if so it substitutes
 `androidx.a.b:c:1.0.0-SNAPSHOT`. Coordinates that don't follow the convention
 are listed in `SnapshotConfig.overrides` in
 [`AndroidXPlugin.kt`](build-logic/src/main/kotlin/androidx/build/AndroidXPlugin.kt).
+
+## Adding extra Gradle plugins / config
+
+Edit [`build-logic/src/main/kotlin/androidchka.extras.gradle.kts`](build-logic/src/main/kotlin/androidchka.extras.gradle.kts).
+It's a normal Kotlin DSL convention plugin — anything that's valid in a
+`build.gradle.kts` works (plugins, dependencies, task config, etc.).
+
+Gradle quirk: precompiled script plugins forbid `version` in their `plugins {}`
+block, so each plugin is added in two places:
+
+1. `build-logic/build.gradle.kts` — `implementation("group:artifact:version")`
+   line for the plugin marker.
+2. `androidchka.extras.gradle.kts` — `id("...")` (no version) inside `plugins {}`.
+
+To restrict a plugin to specific source projects, swap the `plugins {}` form
+for a conditional `apply(plugin = ...)` in `androidchka.extras.gradle.kts`.
 
 ## Configuring which projects to build
 

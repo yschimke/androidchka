@@ -44,6 +44,11 @@ class AndroidXPlugin : Plugin<Project> {
         // Repositories are declared in settings.gradle.kts under PREFER_SETTINGS — adding them
         // again here would trigger a "repository was added by plugin" warning/error.
         SnapshotConfig.applyProjectSubstitutions(project)
+
+        // User-editable convention plugin for any extra Gradle config (additional plugins,
+        // dependencies, task tweaks). Applied to every source project; see
+        // build-logic/src/main/kotlin/androidchka.extras.gradle.kts.
+        project.pluginManager.apply("androidchka.extras")
     }
 }
 

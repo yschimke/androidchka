@@ -9,8 +9,8 @@ pluginManagement {
         mavenCentral()
         gradlePluginPortal()
     }
-    // Pin the versions of plugins referenced by upstream `build.gradle` files (which use the
-    // versionless `id("...")` form). build-logic ids are supplied by the included build itself.
+    // Pin versions of plugins referenced by upstream `build.gradle` files (versionless ids in
+    // their plugins blocks). build-logic ids are supplied by the included build itself.
     plugins {
         id("com.android.library") version "9.3.0-alpha01"
         id("com.android.application") version "9.3.0-alpha01"
@@ -36,6 +36,7 @@ dependencyResolutionManagement {
         }
         google()
         mavenCentral()
+        gradlePluginPortal()
     }
 }
 
@@ -51,9 +52,9 @@ fun source(path: String, relativeProjectDir: String) {
     sourceProjects += path
 }
 
-// Read `androidx.sources` from local.properties (per-clone, git-ignored) and fall back to
-// local.properties.example (committed defaults). Format: comma-separated project paths;
-// `:path = relative/dir` overrides the default `:` -> `/` mapping for an entry.
+// `androidx.sources` from local.properties (per-clone, git-ignored), falling back to
+// local.properties.example (committed defaults). Comma-separated paths; `:path = relative/dir`
+// overrides the default `:` -> `/` mapping for an entry.
 val configFile = sequenceOf("local.properties", "local.properties.example")
     .map(::file)
     .firstOrNull { it.isFile }
@@ -63,16 +64,10 @@ val sourceSpec = configProps.getProperty("androidx.sources")
     ?: error("`androidx.sources` not set in $configFile")
 
 sourceSpec.split(",").map(String::trim).filter(String::isNotEmpty).forEach { entry ->
-    val path: String
-    val relativeDir: String
     val eqIdx = entry.indexOf('=')
-    if (eqIdx >= 0) {
-        path = entry.substring(0, eqIdx).trim()
-        relativeDir = entry.substring(eqIdx + 1).trim()
-    } else {
-        path = entry
-        relativeDir = path.removePrefix(":").replace(':', '/')
-    }
+    val path = if (eqIdx >= 0) entry.substring(0, eqIdx).trim() else entry
+    val relativeDir = if (eqIdx >= 0) entry.substring(eqIdx + 1).trim()
+                      else path.removePrefix(":").replace(':', '/')
     source(path, relativeDir)
 }
 
