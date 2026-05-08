@@ -43,19 +43,22 @@ rootProject.name = "androidx-mini"
 
 // --- Source projects: built from the upstream androidx checkout (via symlink) ---
 val androidxRoot: File = file("androidx")
+val sourceProjects = linkedSetOf<String>()
 
 fun source(path: String, relativeProjectDir: String) {
     include(path)
     project(path).projectDir = File(androidxRoot, relativeProjectDir)
+    sourceProjects += path
 }
 
 source(":wear:compose:remote:remote-material3", "wear/compose/remote/remote-material3")
 source(":compose:remote:remote-creation-compose", "compose/remote/remote-creation-compose")
 
-// --- Stub projects: referenced by the source projects but resolved to androidx.dev artifacts.
-//     Each must exist as a Gradle project so `project(":x")` lookups in build.gradle don't fail;
-//     `substitutions.properties` swaps the project dependency for a Maven coordinate at
-//     resolution time. Keep this list aligned with substitutions.properties.
+// --- Stub projects: referenced by source projects but resolved to androidx.dev artifacts.
+//
+// Each stub must exist as a Gradle project so `project(":x")` lookups in upstream build.gradle
+// files don't fail at configuration time. The AndroidXPlugin's `dependencySubstitution.all { }`
+// rule then swaps the project dependency for a Maven coordinate at resolution time.
 //
 // Gradle implicitly materializes every parent of a nested path (`:test:screenshot:screenshot`
 // pulls in `:test` and `:test:screenshot`) and demands each have a real projectDir, so we walk
@@ -72,17 +75,23 @@ fun stub(path: String) {
     }
 }
 
-stub(":compose:remote:remote-creation")
-stub(":compose:remote:remote-core")
-stub(":compose:remote:remote-core-testutils")
-stub(":compose:remote:remote-player-core")
-stub(":compose:remote:remote-player-compose")
-stub(":compose:remote:remote-player-compose-testutils")
-stub(":compose:remote:remote-player-view")
-stub(":compose:test-utils")
-stub(":compose:ui:ui-test")
-stub(":compose:ui:ui-test-junit4")
-stub(":test:screenshot:screenshot")
-stub(":test:uiautomator:uiautomator")
-stub(":test:uiautomator:uiautomator-shell")
-stub(":wear:compose:remote:remote-material3-samples")
+// Auto-populate stubs by scanning each source project's build.gradle for `project(":path")`
+// references. The regex covers both `project(":x")` and `project(path: ":x")` forms with
+// either quote style. Matches inside line comments are stripped first to cut false positives;
+// block comments are rare enough in androidx build files that we don't bother.
+val projectRefRegex = Regex("""project\s*\(\s*(?:path\s*[:=]\s*)?["'](:[A-Za-z0-9:_\-]+)["']""")
+val lineCommentRegex = Regex("""(?m)//[^\n]*""")
+val referenced = linkedSetOf<String>()
+for (path in sourceProjects) {
+    val projectDir = project(path).projectDir
+    val gradleFile = sequenceOf("build.gradle.kts", "build.gradle")
+        .map { File(projectDir, it) }
+        .firstOrNull { it.isFile } ?: continue
+    val source = gradleFile.readText().replace(lineCommentRegex, "")
+    referenced += projectRefRegex.findAll(source).map { it.groupValues[1] }
+}
+val toStub = referenced - sourceProjects
+toStub.sorted().forEach(::stub)
+gradle.rootProject {
+    logger.lifecycle("[androidchka] auto-stubs: ${toStub.size} -> ${toStub.sorted()}")
+}

@@ -10,7 +10,10 @@ overlay-specific files live here.
 - `androidx` &mdash; symlink to `/home/yuri/workspace/androidx` (the upstream
   checkout). Build files are read from there directly.
 - `settings.gradle.kts` &mdash; declares the **source** projects (built from the
-  upstream tree) and the **stub** projects (resolved to androidx.dev artifacts).
+  upstream tree). **Stubs are auto-populated** by scanning each source
+  project's `build.gradle` for `project(":path")` references — anything not
+  already a source becomes a stub. The list is logged at configuration:
+  `[androidchka] auto-stubs: N -> [...]`.
 - `build-logic/` &mdash; included build providing thin shims for the
   `AndroidXPlugin` / `AndroidXComposePlugin` plugin ids and the `androidx { }`
   DSL extension. Just enough for upstream `build.gradle` files to apply
@@ -36,26 +39,20 @@ are listed in `SnapshotConfig.overrides` in
 
 Source projects:
 - `:wear:compose:remote:remote-material3`
-
-Stub projects (resolved from the snapshot repo):
-- `:compose:remote:remote-creation`
 - `:compose:remote:remote-creation-compose`
-- `:compose:remote:remote-player-core`
-- `:compose:remote:remote-player-compose-testutils`
-- `:compose:ui:ui-test`
-- `:test:screenshot:screenshot`
-- `:test:uiautomator:uiautomator`
-- `:wear:compose:remote:remote-material3-samples`
+
+Stubs are derived automatically. At time of writing the scanner discovers 14
+of them, including the various `compose:remote:remote-*`, `compose:ui:ui-test`,
+`test:uiautomator:uiautomator`, etc.
 
 ## Adding a project to the overlay (build from source)
 
 1. In `settings.gradle.kts`, add a `source(":x:y:z", "x/y/z")` line.
-2. Remove its `stub()` line if present.
-3. If the project's `build.gradle` references new project paths that aren't
-   yet in scope, add them as `stub()` entries — they'll be auto-substituted
-   to androidx.dev snapshot modules. Any path that doesn't follow the
-   `:a:b:c` &rarr; `androidx.a.b:c` convention needs an entry in
-   `SnapshotConfig.overrides`.
+2. Run any task — the scanner picks up new `project(":...")` references and
+   creates the stubs needed.
+3. If a stub's path doesn't follow the `:a:b:c` &rarr; `androidx.a.b:c`
+   convention, add an entry to `SnapshotConfig.overrides` in
+   [`AndroidXPlugin.kt`](build-logic/src/main/kotlin/androidx/build/AndroidXPlugin.kt).
 
 ## Bumping the snapshot
 
