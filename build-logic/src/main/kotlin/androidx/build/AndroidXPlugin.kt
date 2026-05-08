@@ -24,6 +24,13 @@ class AndroidXPlugin : Plugin<Project> {
         project.extensions.create<AndroidXExtension>("androidx", project)
         project.extensions.create<AndroidXMultiplatformExtension>("androidXMultiplatform", project)
 
+        // Claim the canonical Maven coordinates for this project so a downstream `includeBuild`
+        // can auto-substitute `androidx.<group>:<artifact>:<version>` to this project (Gradle
+        // matches by group:name).
+        val coords = SnapshotConfig.coordinatesFor(project.path)
+        project.group = coords.group
+        project.version = "1.0.0-SNAPSHOT"
+
         // The `plugins {}` block in upstream build files applies `AndroidXPlugin` before
         // `com.android.library`, so configure AGP lazily once it shows up. AGP 9.x bundles
         // Kotlin support so we do *not* re-apply the Kotlin plugin here — doing so collides
@@ -81,18 +88,28 @@ internal object SnapshotConfig {
         loadProps(project).getProperty("androidxSnapshotBuildId")
             ?: error("androidxSnapshotBuildId missing from snapshots.properties")
 
+    data class Coordinates(val group: String, val artifact: String) {
+        override fun toString() = "$group:$artifact"
+    }
+
     /**
      * Default convention: `:foo:bar:my-lib` becomes `androidx.foo.bar:my-lib`. The artifact id is
      * the trailing segment; the group prepends `androidx.` to the dot-joined leading segments.
      */
-    private fun coordinateFor(path: String): String {
-        overrides[path]?.let { return it }
+    fun coordinatesFor(path: String): Coordinates {
+        overrides[path]?.let {
+            val (g, a) = it.split(":", limit = 2)
+            return Coordinates(g, a)
+        }
         val segments = path.removePrefix(":").split(":")
         require(segments.size >= 2) { "Cannot derive maven coords from project path '$path'" }
-        val artifact = segments.last()
-        val group = "androidx." + segments.dropLast(1).joinToString(".")
-        return "$group:$artifact"
+        return Coordinates(
+            group = "androidx." + segments.dropLast(1).joinToString("."),
+            artifact = segments.last(),
+        )
     }
+
+    private fun coordinateFor(path: String): String = coordinatesFor(path).toString()
 
     /**
      * A project is "overlay stub" if its directory lives under `stubs/` at the overlay root —

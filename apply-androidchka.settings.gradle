@@ -1,0 +1,24 @@
+// One-line integration script. From a host project's settings.gradle[.kts]:
+//
+//   apply from: '../androidchka/apply-androidchka.settings.gradle'
+//
+// Self-locates via `buildscript.sourceFile`, includes the overlay as a composite build, and
+// adds the configured androidx.dev snapshot repo to the host's resolution.
+
+def overlayRoot = buildscript.sourceFile.parentFile
+
+includeBuild(overlayRoot)
+
+def snapshotProps = new Properties()
+new File(overlayRoot, 'snapshots.properties').withInputStream { snapshotProps.load(it) }
+def snapshotId = snapshotProps['androidxSnapshotBuildId']
+
+dependencyResolutionManagement {
+    repositories {
+        maven {
+            name = "androidx-snapshot-${snapshotId}"
+            url = "https://androidx.dev/snapshots/builds/${snapshotId}/artifacts/repository"
+            content { includeGroupByRegex("androidx\\..*") }
+        }
+    }
+}

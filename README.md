@@ -1,3 +1,8 @@
+# androidchka
+
+> Using this from your own app? See [LOCAL_DEVELOPMENT.md](LOCAL_DEVELOPMENT.md)
+> for the one-line integration.
+
 # androidx-mini
 
 A slim Gradle overlay that builds a hand-picked subset of the AOSP `androidx`
