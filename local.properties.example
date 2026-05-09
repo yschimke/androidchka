@@ -7,8 +7,14 @@
 # unless an entry uses the `:path = relative/dir` form to override.
 #
 # Stubs for every other project referenced by these are auto-populated.
+#
+# androidx.recursiveProjectDiscovery controls which nested projects are auto-included when an
+# entry points at a parent directory. Explicit androidx.sources entries are always included.
+# Values: main, samples, tests, benchmarks, all, none. Combine with commas, e.g. main,samples.
+# Default is main, which avoids accidentally configuring nested sample/test/benchmark projects.
 
 androidx.sources=:wear:compose:remote:remote-material3,:compose:remote:remote-creation-compose
+androidx.recursiveProjectDiscovery=main
 
 # Extra Gradle config (additional plugins, dependencies, task tweaks) is applied via the
 # convention plugin at build-logic/src/main/kotlin/androidchka.extras.gradle.kts. Edit that

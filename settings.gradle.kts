@@ -72,11 +72,11 @@ fun assignProjectDirs(path: String, leafDir: File) {
             // stubbed (e.g. parent at androidx/benchmark + leaf default at
             // androidx/benchmark/benchmark-macro-junit4 with its own build.gradle).
             proj.projectDir = leafDir
-        } else if (!proj.projectDir.isDirectory) {
-            // Parent: first-write-wins, only assign if not already pointed at a real dir.
-            val androidxDir = File(androidxRoot, segments.take(i + 1).joinToString("/"))
-            proj.projectDir = if (androidxDir.isDirectory) androidxDir
-                else file("stubs/${currentPath.removePrefix(":").replace(':', '-')}").apply { mkdirs() }
+        } else if (currentPath !in sourceProjects) {
+            // Parent projects are Gradle containers unless explicitly sourced. Keep them stubbed
+            // so a leaf include cannot accidentally configure a real upstream parent build file.
+            val dirName = currentPath.removePrefix(":").replace(':', '-')
+            proj.projectDir = file("stubs/$dirName").apply { mkdirs() }
         }
     }
 }
@@ -160,9 +160,9 @@ val autoSourcePaths: Set<String> = setOf(
 )
 
 /**
- * Expands a source spec to one or more `source()` calls. If the target directory has its own
- * build script it's used directly; we still recurse into subdirectories so nested projects
- * (`samples`, etc.) get picked up. Each project's Gradle path is taken from upstream's
+ * Expands a source spec to one or more `source()` calls. Explicit entries are always considered;
+ * recursively-discovered children are filtered by [androidx.recursiveProjectDiscovery]. Each
+ * project's Gradle path is taken from upstream's
  * `settings.gradle` when available so references like `project(":wear:compose:remote:remote-material3-samples")`
  * resolve, with a fall-back to the directory-derived `:` path.
  *
@@ -170,27 +170,34 @@ val autoSourcePaths: Set<String> = setOf(
  * so the rest of the build can still configure; they're surfaced in `skippedSources` and
  * logged once Gradle has the root project.
  */
-fun expandSource(path: String, dir: File) {
+fun expandSource(path: String, dir: File, explicit: Boolean = false) {
     if (!dir.isDirectory) error("source path '$path' resolves to non-existent dir $dir")
     val buildScript = sequenceOf("build.gradle", "build.gradle.kts")
         .map { File(dir, it) }
         .firstOrNull { it.isFile }
     if (buildScript != null) {
         val canonicalPath = upstreamDirToPath[dir.relativeTo(androidxRoot).path] ?: path
-        val text = buildScript.readText()
-        val reason: String? =
+        val reason = if (explicit || canonicalPath in explicitSourcePaths || shouldDiscoverRecursively(canonicalPath, dir)) {
+            val text = buildScript.readText()
             unsupportedDslMarkers.entries.firstOrNull { it.key in text }?.value
                 ?: pluginIdRegex.findAll(text)
                     .map { it.groupValues[1] }
                     .firstOrNull { it !in supportedPlugins }
                     ?.let { "plugin: $it" }
-        if (reason != null) {
+        } else {
+            "filtered by androidx.recursiveProjectDiscovery=$recursiveProjectDiscovery"
+        }
+        if (reason != null && reason.startsWith("filtered by ")) {
+            skippedSources[canonicalPath] = reason
+            stub(canonicalPath)
+            return
+        } else if (reason != null) {
             skippedSources[canonicalPath] = reason
             stub(canonicalPath)
         } else {
             source(canonicalPath, dir.relativeTo(androidxRoot).path)
         }
-        // Fall through to recurse — subdirs may host nested projects (e.g. `samples`).
+        // Fall through to recurse — enabled subdirs may host nested projects (e.g. `samples`).
     }
     val children = dir.listFiles { f -> f.isDirectory && !f.name.startsWith(".") }.orEmpty()
         .sortedBy { it.name }
@@ -209,13 +216,48 @@ val configFile = sequenceOf("local.properties", "local.properties.example")
 val configProps = Properties().apply { configFile.inputStream().use(::load) }
 val sourceSpec = configProps.getProperty("androidx.sources")
     ?: error("`androidx.sources` not set in $configFile")
+val recursiveProjectDiscovery =
+    configProps.getProperty("androidx.recursiveProjectDiscovery", "main").trim().lowercase()
+val recursiveDiscoveryModes =
+    recursiveProjectDiscovery.split(",").map(String::trim).filter(String::isNotEmpty).toSet()
+val supportedRecursiveDiscoveryModes = setOf("main", "samples", "tests", "benchmarks", "all", "none")
+check(recursiveDiscoveryModes.isNotEmpty() && recursiveDiscoveryModes.all { it in supportedRecursiveDiscoveryModes }) {
+    "`androidx.recursiveProjectDiscovery` must be one or more of " +
+        supportedRecursiveDiscoveryModes.sorted().joinToString() +
+        "; got '$recursiveProjectDiscovery' in $configFile"
+}
 
-sourceSpec.split(",").map(String::trim).filter(String::isNotEmpty).forEach { entry ->
+fun shouldDiscoverRecursively(path: String, dir: File): Boolean {
+    if ("all" in recursiveDiscoveryModes) return true
+    if ("none" in recursiveDiscoveryModes) return false
+    val segments = path.removePrefix(":").split(":").map { it.lowercase() }
+    val relativeSegments = dir.relativeTo(androidxRoot).invariantSeparatorsPath
+        .split("/")
+        .filter(String::isNotEmpty)
+        .map { it.lowercase() }
+    val names = (segments + relativeSegments).toSet()
+    val isSample = names.any { it == "samples" || it.endsWith("-samples") }
+    val isBenchmark = names.any { "benchmark" in it || "macrobenchmark" in it }
+    val isTest = names.any { it == "test" || it == "tests" || it.endsWith("-test") ||
+        it.endsWith("-tests") || "integration-test" in it || "testutils" in it }
+    if (isBenchmark) return "benchmarks" in recursiveDiscoveryModes
+    if (isTest) return "tests" in recursiveDiscoveryModes
+    if (isSample) return "samples" in recursiveDiscoveryModes
+    return "main" in recursiveDiscoveryModes
+}
+
+val sourceEntries = sourceSpec.split(",").map(String::trim).filter(String::isNotEmpty)
+val explicitSourcePaths = sourceEntries.map { entry ->
+    val eqIdx = entry.indexOf('=')
+    if (eqIdx >= 0) entry.substring(0, eqIdx).trim() else entry
+}.toSet()
+
+sourceEntries.forEach { entry ->
     val eqIdx = entry.indexOf('=')
     val path = if (eqIdx >= 0) entry.substring(0, eqIdx).trim() else entry
     val relativeDir = if (eqIdx >= 0) entry.substring(eqIdx + 1).trim()
                       else path.removePrefix(":").replace(':', '/')
-    expandSource(path, File(androidxRoot, relativeDir))
+    expandSource(path, File(androidxRoot, relativeDir), explicit = true)
 }
 
 // --- Stub projects: referenced by source projects but resolved to androidx.dev artifacts.
@@ -225,9 +267,13 @@ sourceSpec.split(",").map(String::trim).filter(String::isNotEmpty).forEach { ent
 // rule then swaps the project dependency for a Maven coordinate at resolution time.
 fun stub(path: String) {
     include(path)
-    val dirName = path.removePrefix(":").replace(':', '-')
-    val leafDir = file("stubs/$dirName").apply { mkdirs() }
-    assignProjectDirs(path, leafDir)
+    val segments = path.removePrefix(":").split(":")
+    for ((i, _) in segments.withIndex()) {
+        val currentPath = ":${segments.take(i + 1).joinToString(":")}"
+        if (currentPath in sourceProjects) continue
+        val dirName = currentPath.removePrefix(":").replace(':', '-')
+        project(currentPath).projectDir = file("stubs/$dirName").apply { mkdirs() }
+    }
 }
 
 // Discover referenced project paths by scanning each source's build.gradle. The regex covers
@@ -265,6 +311,18 @@ while (true) {
 val finalReferenced = collectReferenced()
 val toStub = finalReferenced - sourceProjects
 toStub.sorted().forEach(::stub)
+
+gradle.beforeProject {
+    val importedRoot = androidxRoot.canonicalFile.toPath()
+    val projectDirPath = projectDir.canonicalFile.toPath()
+    if (path !in sourceProjects && projectDirPath.startsWith(importedRoot)) {
+        error(
+            "Project $path is not listed in androidx.sources but points at imported AndroidX " +
+                "directory $projectDir. Add it explicitly to androidx.sources, enable it via " +
+                "androidx.recursiveProjectDiscovery, or keep it stubbed."
+        )
+    }
+}
 
 gradle.rootProject {
     logger.lifecycle("[androidchka] sources (${sourceProjects.size}): ${sourceProjects.toList()}")
