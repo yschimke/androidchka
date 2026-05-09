@@ -6,6 +6,7 @@ import org.gradle.api.Project
 import org.gradle.api.artifacts.component.ProjectComponentSelector
 import org.gradle.kotlin.dsl.configure
 import org.gradle.kotlin.dsl.create
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import java.io.File
 import java.util.Properties
 
@@ -37,6 +38,7 @@ class AndroidXPlugin : Plugin<Project> {
         // on the `kotlin` extension.
         project.pluginManager.withPlugin("com.android.library") {
             project.extensions.configure<LibraryExtension>("android") {
+                compileSdk = 37
                 compileOptions {
                     sourceCompatibility = org.gradle.api.JavaVersion.VERSION_17
                     targetCompatibility = org.gradle.api.JavaVersion.VERSION_17
@@ -46,6 +48,11 @@ class AndroidXPlugin : Plugin<Project> {
                         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
                     }
                 }
+            }
+        }
+        project.tasks.withType(KotlinCompile::class.java).configureEach {
+            compilerOptions {
+                freeCompilerArgs.add("-Xjvm-default=all")
             }
         }
 
