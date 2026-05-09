@@ -7,7 +7,7 @@ build](https://docs.gradle.org/current/userguide/composite_builds.html).
 Same idea as the
 [androidx/media "Locally" pattern](https://github.com/androidx/media#locally) —
 your app keeps its existing
-`implementation("androidx.compose.remote:remote-creation-compose:…")`
+`implementation("androidx.compose.remote:remote-creation:…")`
 declarations, and Gradle auto-routes them to the in-source projects the
 overlay builds.
 
@@ -24,7 +24,7 @@ enough — the script self-locates, calls `includeBuild` on the overlay, and
 adds the `androidx.dev` snapshot repo configured in
 `androidchka/snapshots.properties` to your project's resolution. Build your
 app normally; coordinates that map to a source project (e.g.
-`androidx.compose.remote:remote-creation-compose:1.0.0-SNAPSHOT`) resolve
+`androidx.compose.remote:remote-creation:1.0.0-SNAPSHOT`) resolve
 locally, everything else from the snapshot repo.
 
 ## Prerequisites
@@ -91,43 +91,42 @@ cached metadata.
 
 ## What the apply script does
 
-`apply-androidchka.settings.gradle` is intentionally tiny:
+`apply-androidchka.settings.gradle` keeps the host-project integration small:
 
 - finds its own location via `buildscript.sourceFile`,
-- `includeBuild`s the overlay (Gradle's auto-substitution does the
-  `androidx.<group>:<artifact>:1.0.0-SNAPSHOT` &harr; in-source-project
-  matching by `group:name`),
+- reads androidchka's selected source projects and `includeBuild`s the overlay
+  with substitutions for their published main Maven coordinates,
 - adds the `androidx.dev` snapshot repo (group-restricted to `androidx.*`)
   by reading `snapshots.properties`.
 
-That's the whole integration. No rules to maintain in your app.
+That's the whole integration. No per-project substitution rules to maintain in
+your app for published main coordinates.
+
+There are two substitution modes:
+
+- **androidchka local development:** inside this repo, source projects can
+  depend on whatever AndroidX projects the overlay needs to make them compile:
+  main libraries, samples, tests, demos, and internal helpers.
+- **Host-app embedding:** when a downstream app applies
+  `apply-androidchka.settings.gradle`, only externally published main artifacts
+  are replaced by source projects. Helper projects may still be included inside
+  the overlay, but they are not treated as app-facing dependency coordinates.
 
 ## Caveats
 
-- **Naming overrides aren't auto-substituted.** Most upstream paths follow
-  the `:a:b:c` &rarr; `androidx.a.b:c` Maven convention and substitute
-  automatically. A few don't (e.g. `:wear:compose:remote:remote-material3-samples`
-  &rarr; `androidx.wear.compose:compose-remote-material3-samples`); Gradle
-  can't infer those. If you need to source-build such a project, add an
-  explicit rule yourself:
-  ```kotlin
-  apply(from = "../androidchka/apply-androidchka.settings.gradle")
-
-  // Override for an unconventionally-named coordinate:
-  gradle.allprojects {
-      configurations.all {
-          resolutionStrategy.dependencySubstitution {
-              substitute(module("androidx.wear.compose:compose-remote-material3-samples"))
-                  .using(project(":androidx-mini:wear:compose:remote:remote-material3-samples"))
-          }
-      }
-  }
-  ```
-- **KMP target artifacts need explicit substitution.** The apply script already
-  maps Remote Compose's target-specific artifacts, such as
-  `androidx.compose.remote:remote-creation-android`, back to the source project.
-  If another sourced KMP module is used through a direct `*-android` or `*-jvm`
-  coordinate, add the same kind of substitution in your settings file.
+- **Only published main artifacts are substituted.** The apply script assumes
+  host apps depend on public AndroidX coordinates, and maps those coordinates
+  to the matching source projects. Samples, demos, benchmarks, test utilities,
+  target-specific KMP artifacts, and other internal coordinates are not part of
+  that automatic host-app substitution contract.
+- **Use root KMP coordinates.** For multiplatform AndroidX libraries, depend on
+  the root coordinate, e.g. `androidx.compose.remote:remote-creation`, rather
+  than target-specific artifacts like `remote-creation-android` or
+  `remote-creation-jvm`. The apply script explicitly substitutes every sourced
+  root coordinate to its project, which keeps published target artifacts from
+  mixing with source projects. Non-KMP published artifacts, such as
+  `androidx.compose.remote:remote-creation-compose`, are still normal published
+  main artifacts and can be depended on directly.
 - **Plugin / DSL coverage is limited.** `androidchka` reproduces only the
   pieces of the upstream `buildSrc` needed to compile a `build.gradle` file
   end-to-end. Projects that use unsupported plugins (`androidx.benchmark`,

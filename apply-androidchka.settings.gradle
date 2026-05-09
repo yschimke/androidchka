@@ -12,15 +12,17 @@ if (hostAgpVersion != null && !hostAgpVersion.trim().isEmpty()) {
     System.setProperty("androidchka.agpVersion", hostAgpVersion.trim())
 }
 
+// Host-app embedding is intentionally narrower than androidchka's own local-development build.
+// The overlay may source samples, demos, tests, and internal helpers so selected AndroidX
+// projects can compile, but an app should only have public AndroidX main artifacts replaced.
+apply from: new File(overlayRoot, 'gradle/androidchka-host-substitutions.settings.gradle')
+def moduleToProjectPath = androidchkaPublishedMainSubstitutions(overlayRoot)
+
 includeBuild(overlayRoot) {
     dependencySubstitution {
-        // Gradle's automatic composite substitution matches the root KMP coordinate
-        // (`androidx.compose.remote:remote-creation`) but not target-specific artifacts that
-        // apps may depend on directly.
-        substitute(module("androidx.compose.remote:remote-creation-android"))
-            .using(project(":compose:remote:remote-creation"))
-        substitute(module("androidx.compose.remote:remote-creation-jvm"))
-            .using(project(":compose:remote:remote-creation"))
+        moduleToProjectPath.each { coordinates, path ->
+            substitute(module(coordinates.toString())).using(project(path))
+        }
     }
 }
 

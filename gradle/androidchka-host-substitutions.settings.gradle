@@ -1,0 +1,117 @@
+// Helpers for host-app embedding. This script is applied by
+// apply-androidchka.settings.gradle and exposes one function:
+//
+//   androidchkaPublishedMainSubstitutions(File overlayRoot)
+//
+// It returns a map of external Maven coordinates to androidchka project paths, restricted to
+// sourced AndroidX projects that declare a published main SoftwareType.
+
+ext.androidchkaPublishedMainSubstitutions = { File overlayRoot ->
+    def overlayConfigFile = [new File(overlayRoot, 'local.properties'), new File(overlayRoot, 'local.properties.example')]
+        .find { it.isFile() }
+    if (overlayConfigFile == null) {
+        throw new GradleException("Neither local.properties nor local.properties.example found in ${overlayRoot}")
+    }
+    def overlayConfig = new Properties()
+    overlayConfigFile.withInputStream { overlayConfig.load(it) }
+
+    def sourceEntries = (overlayConfig['androidx.sources'] ?: '')
+        .toString()
+        .split(',')
+        .collect { it.trim() }
+        .findAll { !it.isEmpty() }
+
+    def explicitSourcePaths = sourceEntries.collect { entry ->
+        def eqIdx = entry.indexOf('=')
+        eqIdx >= 0 ? entry.substring(0, eqIdx).trim() : entry
+    }.toSet()
+
+    def recursiveProjectDiscovery = (overlayConfig['androidx.recursiveProjectDiscovery'] ?: 'main')
+        .toString()
+        .trim()
+        .toLowerCase(Locale.ROOT)
+    def recursiveDiscoveryModes = recursiveProjectDiscovery.split(',')
+        .collect { it.trim() }
+        .findAll { !it.isEmpty() }
+        .toSet()
+
+    def androidxRoot = new File(overlayRoot, 'androidx')
+    def upstreamDirToPath = [:]
+    def upstreamSettings = new File(androidxRoot, 'settings.gradle')
+    if (upstreamSettings.isFile()) {
+        def settingsText = upstreamSettings.text
+        def withDir = settingsText =~ /includeProject\(\s*"([^"]+)"\s*,\s*"([^"]+)"/
+        withDir.each { match -> upstreamDirToPath[match[2]] = match[1] }
+        def noDir = settingsText =~ /includeProject\(\s*"([^"]+)"/
+        noDir.each { match ->
+            def path = match[1]
+            upstreamDirToPath.putIfAbsent(path.replaceFirst('^:', '').replace(':', '/'), path)
+        }
+    }
+
+    def shouldDiscoverProject = { String path, File dir ->
+        if (recursiveDiscoveryModes.contains('all')) return true
+        if (recursiveDiscoveryModes.contains('none')) return false
+        def pathSegments = path.replaceFirst('^:', '').split(':').collect { it.toLowerCase(Locale.ROOT) }
+        def relativeSegments = androidxRoot.toPath().relativize(dir.toPath()).toString()
+            .split(/[\\\/]/)
+            .findAll { !it.isEmpty() }
+            .collect { it.toLowerCase(Locale.ROOT) }
+        def names = (pathSegments + relativeSegments).toSet()
+        def isSample = names.any { it == 'samples' || it.endsWith('-samples') }
+        def isBenchmark = names.any { it.contains('benchmark') || it.contains('macrobenchmark') }
+        def isTest = names.any {
+            it == 'test' || it == 'tests' || it.endsWith('-test') || it.endsWith('-tests') ||
+                it.contains('integration-test') || it.contains('testutils')
+        }
+        if (isBenchmark) return recursiveDiscoveryModes.contains('benchmarks')
+        if (isTest) return recursiveDiscoveryModes.contains('tests')
+        if (isSample) return recursiveDiscoveryModes.contains('samples')
+        return recursiveDiscoveryModes.contains('main')
+    }
+
+    def sourcedProjectPaths = new LinkedHashSet<String>()
+    def sourcedProjectBuildFiles = [:]
+    def collectSourcedProjects
+    collectSourcedProjects = { String path, File dir, boolean explicit ->
+        if (!dir.isDirectory()) return
+        def buildFile = ['build.gradle', 'build.gradle.kts'].collect { new File(dir, it) }.find { it.isFile() }
+        if (buildFile != null) {
+            def relativeDir = androidxRoot.toPath().relativize(dir.toPath()).toString()
+            def canonicalPath = upstreamDirToPath[relativeDir] ?: path
+            if (explicit || explicitSourcePaths.contains(canonicalPath) || shouldDiscoverProject(canonicalPath, dir)) {
+                sourcedProjectPaths.add(canonicalPath)
+                sourcedProjectBuildFiles[canonicalPath] = buildFile
+            }
+        }
+        dir.listFiles({ File f -> f.isDirectory() && !f.name.startsWith('.') } as FileFilter)
+            ?.sort { it.name }
+            ?.each { child -> collectSourcedProjects("${path}:${child.name}", child, false) }
+    }
+
+    sourceEntries.each { entry ->
+        def eqIdx = entry.indexOf('=')
+        def path = eqIdx >= 0 ? entry.substring(0, eqIdx).trim() : entry
+        def relativeDir = eqIdx >= 0 ? entry.substring(eqIdx + 1).trim() : path.replaceFirst('^:', '').replace(':', '/')
+        collectSourcedProjects(path, new File(androidxRoot, relativeDir), true)
+    }
+
+    def coordinatesFor = { String path ->
+        def segments = path.replaceFirst('^:', '').split(':') as List
+        if (segments.size() < 2) {
+            throw new GradleException("Cannot derive maven coords from project path '${path}'")
+        }
+        "androidx.${segments.dropRight(1).join('.')}:${segments.last()}"
+    }
+
+    def isPublishedMainArtifact = { String path ->
+        def buildFile = sourcedProjectBuildFiles[path]
+        if (buildFile == null || !buildFile.isFile()) return false
+        def softwareType = buildFile.text =~ /type\s*=\s*SoftwareType\.([A-Z0-9_]+)/
+        softwareType.find() && softwareType.group(1).startsWith('PUBLISHED_')
+    }
+
+    sourcedProjectPaths
+        .findAll { path -> isPublishedMainArtifact(path) }
+        .collectEntries { path -> [(coordinatesFor(path)): path] }
+}
