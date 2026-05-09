@@ -3,6 +3,10 @@
 import java.util.Properties
 
 pluginManagement {
+    val androidchkaAgpVersion =
+        providers.systemProperty("androidchka.agpVersion")
+            .orElse(providers.gradleProperty("androidchka.agpVersion"))
+            .getOrElse("9.3.0-alpha01")
     includeBuild("build-logic")
     repositories {
         google()
@@ -12,8 +16,8 @@ pluginManagement {
     // Pin versions of plugins referenced by upstream `build.gradle` files (versionless ids in
     // their plugins blocks). build-logic ids are supplied by the included build itself.
     plugins {
-        id("com.android.library") version "9.3.0-alpha01"
-        id("com.android.application") version "9.3.0-alpha01"
+        id("com.android.library") version androidchkaAgpVersion
+        id("com.android.application") version androidchkaAgpVersion
         id("org.jetbrains.kotlin.android") version "2.3.20"
         id("org.jetbrains.kotlin.jvm") version "2.3.20"
         id("org.jetbrains.kotlin.plugin.compose") version "2.3.20"

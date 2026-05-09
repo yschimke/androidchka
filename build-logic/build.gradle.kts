@@ -5,12 +5,17 @@ plugins {
 }
 
 /** Read a property from the overlay root's `gradle.properties` (one level above build-logic). */
-fun overlayProperty(name: String): String {
+fun overlayProperty(name: String, default: String? = null): String {
     val props = Properties().apply {
         rootDir.parentFile.resolve("gradle.properties").inputStream().use { load(it) }
     }
-    return props.getProperty(name) ?: error("'$name' missing from overlay gradle.properties")
+    return providers.systemProperty(name)
+        .orElse(providers.gradleProperty(name))
+        .orElse(props.getProperty(name) ?: default ?: error("'$name' missing from overlay gradle.properties"))
+        .get()
 }
+
+val androidchkaAgpVersion = overlayProperty("androidchka.agpVersion", "9.3.0-alpha01")
 
 repositories {
     google()
@@ -19,12 +24,15 @@ repositories {
 }
 
 dependencies {
-    compileOnly(libs.androidGradlePluginApi)
+    compileOnly("com.android.tools.build:gradle-api:$androidchkaAgpVersion")
     // Kotlin gradle plugin types are needed at compile time for the KMP shim and at runtime for
     // applying `org.jetbrains.kotlin.multiplatform` programmatically.
     implementation("org.jetbrains.kotlin:kotlin-gradle-plugin:${libs.versions.kotlin.get()}")
     // AGP KMP library plugin — provides the `androidLibrary` extension on the kotlin DSL.
-    implementation(libs.androidKotlinMultiplatform)
+    implementation(
+        "com.android.kotlin.multiplatform.library:" +
+            "com.android.kotlin.multiplatform.library.gradle.plugin:$androidchkaAgpVersion"
+    )
     // The compose compiler plugin must be on this build-logic classpath at *runtime* so
     // `apply("org.jetbrains.kotlin.plugin.compose")` from AndroidXComposePlugin can find it.
     implementation("org.jetbrains.kotlin:compose-compiler-gradle-plugin:${libs.versions.composeCompilerPlugin.get()}")

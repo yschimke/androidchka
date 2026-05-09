@@ -55,6 +55,29 @@ locally, everything else from the snapshot repo.
    stubs, and any sources skipped because their build.gradle uses DSL the
    overlay doesn't satisfy.
 
+## Matching your app's AGP version
+
+Gradle allows only one Android Gradle Plugin version in a build. When
+`androidchka` is included from your app, set its AGP version to match the app's
+version in the host app's `gradle.properties`:
+
+```properties
+# host-app/gradle.properties
+androidchka.agpVersion=9.2.1
+```
+
+`apply-androidchka.settings.gradle` forwards that property into the included
+`androidchka` build before Gradle resolves Android plugins. You can also pass it
+on the command line:
+
+```sh
+./gradlew test -Pandroidchka.agpVersion=9.2.1
+```
+
+`androidchka/gradle.properties` only provides the standalone default. Use an
+AGP version new enough for the AndroidX modules you are sourcing; many current
+AndroidX build files use AGP 9 DSL such as `compileSdk { version = release(37) }`.
+
 ## Bumping the snapshot
 
 ```sh
@@ -100,6 +123,11 @@ That's the whole integration. No rules to maintain in your app.
       }
   }
   ```
+- **KMP target artifacts need explicit substitution.** The apply script already
+  maps Remote Compose's target-specific artifacts, such as
+  `androidx.compose.remote:remote-creation-android`, back to the source project.
+  If another sourced KMP module is used through a direct `*-android` or `*-jvm`
+  coordinate, add the same kind of substitution in your settings file.
 - **Plugin / DSL coverage is limited.** `androidchka` reproduces only the
   pieces of the upstream `buildSrc` needed to compile a `build.gradle` file
   end-to-end. Projects that use unsupported plugins (`androidx.benchmark`,

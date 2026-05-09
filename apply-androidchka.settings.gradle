@@ -7,7 +7,22 @@
 
 def overlayRoot = buildscript.sourceFile.parentFile
 
-includeBuild(overlayRoot)
+def hostAgpVersion = providers.gradleProperty("androidchka.agpVersion").orNull
+if (hostAgpVersion != null && !hostAgpVersion.trim().isEmpty()) {
+    System.setProperty("androidchka.agpVersion", hostAgpVersion.trim())
+}
+
+includeBuild(overlayRoot) {
+    dependencySubstitution {
+        // Gradle's automatic composite substitution matches the root KMP coordinate
+        // (`androidx.compose.remote:remote-creation`) but not target-specific artifacts that
+        // apps may depend on directly.
+        substitute(module("androidx.compose.remote:remote-creation-android"))
+            .using(project(":compose:remote:remote-creation"))
+        substitute(module("androidx.compose.remote:remote-creation-jvm"))
+            .using(project(":compose:remote:remote-creation"))
+    }
+}
 
 def snapshotProps = new Properties()
 new File(overlayRoot, 'snapshots.properties').withInputStream { snapshotProps.load(it) }
