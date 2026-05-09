@@ -1,21 +1,25 @@
 # androidchka
 
-> Using this from your own app? See [LOCAL_DEVELOPMENT.md](LOCAL_DEVELOPMENT.md)
-> for the one-line integration.
+androidchka is a small Gradle workspace for testing your app against local
+AndroidX changes. It is useful when you can reproduce a bug in your app and
+want to fix or validate the relevant AndroidX modules from source without
+pulling every dependency into the active build.
 
-# androidx-mini
+Point the `androidx` symlink at a local AndroidX checkout, list the source
+modules you want in `local.properties`, and androidchka builds just those
+projects. Everything else resolves from a pinned `androidx.dev` snapshot, so
+your local build stays focused and reasonably quick.
 
-A slim Gradle overlay that builds a hand-picked subset of the AOSP `androidx`
-checkout against an `androidx.dev` snapshot for everything else. The upstream
-checkout is referenced via the `androidx` symlink and **never modified** — all
-overlay-specific files live here.
+Use this when you want a nearby app to run against selected source-built
+AndroidX artifacts while the rest of the dependency graph stays on snapshots.
+For one-line app integration, see [LOCAL_DEVELOPMENT.md](LOCAL_DEVELOPMENT.md).
 
 ## Layout
 
-- `androidx` &mdash; symlink to `/home/yuri/workspace/androidx` (the upstream
-  checkout). Build files are read from there directly.
+- `androidx` &mdash; symlink to `/home/yuri/workspace/androidx`, or wherever your
+  local AndroidX checkout lives. Build files are read from there directly.
 - `local.properties.example` &mdash; committed default `androidx.sources=...`
-  list (Gradle project paths to build from upstream).
+  list (Gradle project paths to build from source).
 - `local.properties` &mdash; per-clone override, git-ignored. Copy from
   `.example` and edit if you want a different subset.
 - `settings.gradle.kts` &mdash; reads the source list from `local.properties`
@@ -28,7 +32,7 @@ overlay-specific files live here.
   Gradle plugins, dependencies, task tweaks here.
 - `build-logic/` &mdash; included build providing thin shims for the
   `AndroidXPlugin` / `AndroidXComposePlugin` plugin ids and the `androidx { }`
-  DSL extension. Just enough for upstream `build.gradle` files to apply
+  DSL extension. Just enough for AndroidX `build.gradle` files to apply
   cleanly; no publishing, lint, API tracking, samples plumbing, etc.
 - `stubs/` &mdash; empty directories backing the stub projects. They exist so
   that `project(":foo:bar")` references resolve at configuration time;
