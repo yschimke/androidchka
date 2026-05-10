@@ -1,3 +1,5 @@
+<img src="docs/icon.png" align="right" width="96" height="96" alt="androidchka icon">
+
 # androidchka
 
 androidchka is a small Gradle workspace for testing your app against local
@@ -13,6 +15,18 @@ your local build stays focused and reasonably quick.
 Use this when you want a nearby app to run against selected source-built
 AndroidX artifacts while the rest of the dependency graph stays on snapshots.
 For one-line app integration, see [LOCAL_DEVELOPMENT.md](LOCAL_DEVELOPMENT.md).
+
+> [!CAUTION]
+> **Not a valid setup for upstream AndroidX PRs.** androidchka is a
+> reproduction / local-validation harness only. It deliberately skips the
+> AndroidX quality gates — **no API tracking, no API/binary compatibility
+> checks, no lint baselines, no Metalava, no sample/golden wiring, no
+> publishing or KMP plumbing** — and the convention plugins it ships are
+> stubs, not the real `AndroidXPlugin`. On top of that, **most AndroidX
+> modules don't accept GitHub PR contributions** and must go through Gerrit
+> on `android.googlesource.com` against the full AndroidX build. Use
+> androidchka to validate a fix against your app, then re-apply and submit
+> the change in the official AndroidX checkout.
 
 ## Layout
 
