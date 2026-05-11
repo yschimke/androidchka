@@ -166,6 +166,14 @@ open class AndroidXMultiplatformExtension(internal val project: Project) {
         configure(kotlin.sourceSets, block)
     }
 
+    fun createNativeCompilation(
+        name: String,
+        type: Any,
+        block: Closure<*>
+    ) {
+        // no-op
+    }
+
     private fun configure(target: Any, block: Closure<*>) {
         block.delegate = target
         block.resolveStrategy = Closure.DELEGATE_FIRST

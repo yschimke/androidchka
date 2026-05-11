@@ -18,6 +18,7 @@ pluginManagement {
     plugins {
         id("com.android.library") version androidchkaAgpVersion
         id("com.android.application") version androidchkaAgpVersion
+        id("com.google.protobuf") version "0.9.4"
         id("org.jetbrains.kotlin.android") version "2.3.20"
         id("org.jetbrains.kotlin.jvm") version "2.3.20"
         id("org.jetbrains.kotlin.plugin.compose") version "2.3.20"
@@ -109,6 +110,7 @@ val supportedPlugins: Set<String> = setOf(
     "androidchka.extras",
     "ee.schimke.composeai.preview",
     "com.gradleup.tapmoc",
+    "com.google.protobuf",
 )
 val pluginIdRegex = Regex("""\b(?:id|alias)\s*\(\s*["']([^"']+)["']""")
 val unsupportedDslMarkers = mapOf<String, String>(
@@ -128,7 +130,7 @@ val unsupportedDslMarkers = mapOf<String, String>(
 val upstreamPathToDir: Map<String, String> = run {
     val upstreamSettings = File(androidxRoot, "settings.gradle")
     if (!upstreamSettings.isFile) return@run emptyMap()
-    val withDir = Regex("""includeProject\(\s*["'](:[^"']+)["']\s*,\s*["']([^"']+)["']""")
+    val withDir = Regex("""includeProject\(\s*["'](:[^"']+)["']\s*,\s*["']([^"']+)["'][^)]*\)""")
     val noDir = Regex("""includeProject\(\s*["'](:[^"']+)["']\s*[,)]""")
     val text = upstreamSettings.readText()
     val map = LinkedHashMap<String, String>()
@@ -162,6 +164,13 @@ val autoSourcePaths: Set<String> = setOf(
     ":compose:remote:remote-core-testutils",
     ":compose:remote:remote-creation",
     ":kruth:kruth",
+    ":test:uiautomator:uiautomator",
+    ":test:uiautomator:uiautomator-shell",
+    ":test:uiautomator:uiautomator-lint",
+    ":compose:remote:remote-player-compose-testutils",
+    ":compose:test-utils",
+    ":test:screenshot:screenshot",
+    ":test:screenshot:screenshot-proto",
     // `:compose:test-utils` and `:compose:benchmark-utils` are heavily referenced but use KMP
     // targets (`desktop()`, `androidHostTest`) the overlay's KMP shim doesn't fake yet — they
     // stay as snapshot-resolved stubs.
@@ -310,7 +319,7 @@ while (true) {
     for (path in toPromote.sorted()) {
         val relativeDir = upstreamPathToDir[path]
             ?: error("autoSourcePaths entry $path has no upstream directory mapping")
-        expandSource(path, File(androidxRoot, relativeDir))
+        expandSource(path, File(androidxRoot, relativeDir), explicit = true)
         autoPromoted += path
     }
 }

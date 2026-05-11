@@ -4,6 +4,8 @@ local.properties
 *.iml
 .kotlin/
 bin/
+*/project.json
+*/settings.json
 
 # Gradle output directories — anchored so they don't match `androidx/build/` package dirs.
 /build/
