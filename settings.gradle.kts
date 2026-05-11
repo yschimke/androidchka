@@ -205,7 +205,7 @@ fun expandSource(path: String, dir: File, explicit: Boolean = false) {
         }
         // Fall through to recurse — enabled subdirs may host nested projects (e.g. `samples`).
     }
-    val children = dir.listFiles { f -> f.isDirectory && !f.name.startsWith(".") }.orEmpty()
+    val children = dir.listFiles { f -> f.isDirectory && !f.name.startsWith(".") && f.name != "build" }.orEmpty()
         .sortedBy { it.name }
     for (child in children) {
         expandSource("$path:${child.name}", child)
@@ -303,7 +303,7 @@ fun collectReferenced(): Set<String> = buildSet {
 // entries that weren't visible yet. Two iterations is usually enough for the curated set.
 while (true) {
     val referenced = collectReferenced()
-    val toPromote = referenced.intersect(autoSourcePaths) - sourceProjects
+    val toPromote = referenced.intersect(autoSourcePaths) - sourceProjects - skippedSources.keys
     if (toPromote.isEmpty()) break
     for (path in toPromote.sorted()) {
         val relativeDir = upstreamPathToDir[path]
