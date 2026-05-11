@@ -108,6 +108,7 @@ val supportedPlugins: Set<String> = setOf(
     "org.jetbrains.kotlin.plugin.compose",
     "androidchka.extras",
     "ee.schimke.composeai.preview",
+    "com.gradleup.tapmoc",
 )
 val pluginIdRegex = Regex("""\b(?:id|alias)\s*\(\s*["']([^"']+)["']""")
 val unsupportedDslMarkers = mapOf<String, String>(
@@ -158,6 +159,7 @@ val autoSourcePaths: Set<String> = setOf(
     ":internal-testutils-runtime",
     ":internal-testutils-truth",
     ":internal-testutils-benchmark-macro",
+    ":compose:remote:remote-core-testutils",
     // `:compose:test-utils` and `:compose:benchmark-utils` are heavily referenced but use KMP
     // targets (`desktop()`, `androidHostTest`) the overlay's KMP shim doesn't fake yet — they
     // stay as snapshot-resolved stubs.

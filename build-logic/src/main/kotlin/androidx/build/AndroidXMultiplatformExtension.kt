@@ -80,6 +80,37 @@ open class AndroidXMultiplatformExtension(internal val project: Project) {
         kotlin.jvm()
     }
 
+    fun mac() {
+    }
+
+    fun linux() {
+    }
+
+    fun ios() {
+    }
+
+    fun watchos() {
+    }
+
+    fun tvos() {
+    }
+
+    fun androidNative() {
+    }
+
+    fun mingwX64() {
+    }
+
+    fun wasmJs() {
+        ensureKmpApplied()
+        kotlin.sourceSets.maybeCreate("webTest")
+    }
+
+    fun js() {
+        ensureKmpApplied()
+        kotlin.sourceSets.maybeCreate("webTest")
+    }
+
     fun jvm(block: Closure<*>) {
         kotlin.jvm { configure(this, block) }
     }

@@ -15,6 +15,14 @@ plugins {
     // Stage the plugin classes on the project classpath without applying them — we
     // conditionally apply below.
     id("ee.schimke.composeai.preview") apply false
+    id("com.gradleup.tapmoc") apply false
+}
+
+afterEvaluate {
+    pluginManager.apply("com.gradleup.tapmoc")
+    tapmoc {
+        java(21)
+    }
 }
 
 /**
