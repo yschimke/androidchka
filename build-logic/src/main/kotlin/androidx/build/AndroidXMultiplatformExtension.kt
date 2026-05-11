@@ -45,6 +45,7 @@ open class AndroidXMultiplatformExtension(internal val project: Project) {
                 }
             }
         }
+        kotlin.sourceSets.maybeCreate("nonJvmMain")
     }
 
     private val kotlin: KotlinMultiplatformExtension
@@ -83,24 +84,45 @@ open class AndroidXMultiplatformExtension(internal val project: Project) {
     }
 
     fun mac() {
+        ensureKmpApplied()
+        kotlin.sourceSets.maybeCreate("nativeMain")
+        kotlin.sourceSets.maybeCreate("nativeTest")
     }
 
     fun linux() {
+        ensureKmpApplied()
+        kotlin.sourceSets.maybeCreate("nativeMain")
+        kotlin.sourceSets.maybeCreate("nativeTest")
     }
 
     fun ios() {
+        ensureKmpApplied()
+        kotlin.sourceSets.maybeCreate("nativeMain")
+        kotlin.sourceSets.maybeCreate("nativeTest")
     }
 
     fun watchos() {
+        ensureKmpApplied()
+        kotlin.sourceSets.maybeCreate("nativeMain")
+        kotlin.sourceSets.maybeCreate("nativeTest")
     }
 
     fun tvos() {
+        ensureKmpApplied()
+        kotlin.sourceSets.maybeCreate("nativeMain")
+        kotlin.sourceSets.maybeCreate("nativeTest")
     }
 
     fun androidNative() {
+        ensureKmpApplied()
+        kotlin.sourceSets.maybeCreate("nativeMain")
+        kotlin.sourceSets.maybeCreate("nativeTest")
     }
 
     fun mingwX64() {
+        ensureKmpApplied()
+        kotlin.sourceSets.maybeCreate("nativeMain")
+        kotlin.sourceSets.maybeCreate("nativeTest")
     }
 
     fun jvmStubs() {
@@ -109,13 +131,23 @@ open class AndroidXMultiplatformExtension(internal val project: Project) {
     fun linuxX64Stubs() {
     }
 
+    fun desktop() {
+        ensureKmpApplied()
+        kotlin.sourceSets.maybeCreate("desktopMain")
+        kotlin.sourceSets.maybeCreate("desktopTest")
+    }
+
     fun wasmJs() {
         ensureKmpApplied()
+        kotlin.sourceSets.maybeCreate("wasmJsMain")
+        kotlin.sourceSets.maybeCreate("wasmJsTest")
         kotlin.sourceSets.maybeCreate("webTest")
     }
 
     fun js() {
         ensureKmpApplied()
+        kotlin.sourceSets.maybeCreate("jsMain")
+        kotlin.sourceSets.maybeCreate("jsTest")
         kotlin.sourceSets.maybeCreate("webTest")
     }
 
