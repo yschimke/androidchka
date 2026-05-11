@@ -72,16 +72,6 @@ class AndroidXPlugin : Plugin<Project> {
  * project-path → Maven-coordinate substitution that swaps stub projects for snapshot artifacts.
  */
 internal object SnapshotConfig {
-    private fun rootFile(project: Project, name: String): File =
-        project.rootProject.layout.projectDirectory.file(name).asFile
-
-    private fun loadProps(project: Project): Properties {
-        val f = rootFile(project, "snapshots.properties")
-        val p = Properties()
-        if (f.isFile) f.inputStream().use(p::load)
-        return p
-    }
-
     /**
      * Hand-curated overrides for paths whose Maven coordinates don't follow the standard
      * `:a:b:c` → `androidx.a.b:c` rule (e.g. samples artifacts published under flattened names).
@@ -91,9 +81,13 @@ internal object SnapshotConfig {
             "androidx.wear.compose:compose-remote-material3-samples",
     )
 
-    fun snapshotId(project: Project): String =
-        loadProps(project).getProperty("androidxSnapshotBuildId")
-            ?: error("androidxSnapshotBuildId missing from snapshots.properties")
+    fun snapshotId(project: Project): String {
+        val file = project.rootProject.layout.projectDirectory.file("snapshots.properties")
+        val contentProvider = project.providers.fileContents(file).asText
+        val content = contentProvider.orNull ?: error("No snapshots.properties found")
+        val props = Properties().apply { load(content.reader()) }
+        return props.getProperty("androidxSnapshotBuildId") ?: error("No androidxSnapshotBuildId in snapshots.properties")
+    }
 
     data class Coordinates(val group: String, val artifact: String) {
         override fun toString() = "$group:$artifact"
@@ -117,9 +111,10 @@ internal object SnapshotConfig {
     }
 
     private fun composeVersion(project: Project): String {
-        val f = rootFile(project, "androidx/libraryversions.toml")
-        if (f.isFile) {
-            val text = f.readText()
+        val file = project.rootProject.layout.projectDirectory.file("androidx/libraryversions.toml")
+        val contentProvider = project.providers.fileContents(file).asText
+        val text = contentProvider.orNull
+        if (text != null) {
             val match = Regex("""COMPOSE\s*=\s*["']([^"']+)["']""").find(text)
             if (match != null) {
                 val version = match.groupValues[1]
@@ -137,7 +132,7 @@ internal object SnapshotConfig {
      * that's the convention used by [Settings.kt][settings.gradle.kts]'s `stub()` helper.
      */
     private fun isStub(project: Project): Boolean {
-        val stubsDir = rootFile(project.rootProject, "stubs")
+        val stubsDir = project.rootProject.layout.projectDirectory.dir("stubs").asFile
         return generateSequence(project.projectDir) { it.parentFile }
             .any { it == stubsDir }
     }

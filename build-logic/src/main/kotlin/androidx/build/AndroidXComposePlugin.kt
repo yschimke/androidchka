@@ -10,5 +10,8 @@ class AndroidXComposePlugin : Plugin<Project> {
         project.pluginManager.withPlugin("com.android.library") {
             project.plugins.apply("org.jetbrains.kotlin.plugin.compose")
         }
+        project.pluginManager.withPlugin("com.android.kotlin.multiplatform.library") {
+            project.plugins.apply("org.jetbrains.kotlin.plugin.compose")
+        }
     }
 }
