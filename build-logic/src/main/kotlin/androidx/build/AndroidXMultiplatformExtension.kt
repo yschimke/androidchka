@@ -63,12 +63,14 @@ open class AndroidXMultiplatformExtension(internal val project: Project) {
         val target = (kotlin as ExtensionAware).extensions.getByType(
             KotlinMultiplatformAndroidLibraryTarget::class.java
         )
+        target.compileSdk = 37
         configure(target, block)
         // Auto-enable host & device test compilations when the matching source dirs exist on
         // disk — upstream's projects expect `androidUnitTest` / `androidDeviceTest` source sets
         // to materialize without an explicit `withHostTest {}` / `withDeviceTest {}` call.
-        if (java.io.File(project.projectDir, "src/androidUnitTest").isDirectory) {
+        if (java.io.File(project.projectDir, "src/androidUnitTest").isDirectory || java.io.File(project.projectDir, "src/androidHostTest").isDirectory) {
             target.withHostTest { }
+            kotlin.sourceSets.maybeCreate("androidHostTest")
         }
         if (java.io.File(project.projectDir, "src/androidDeviceTest").isDirectory) {
             target.withDeviceTest { }
@@ -99,6 +101,12 @@ open class AndroidXMultiplatformExtension(internal val project: Project) {
     }
 
     fun mingwX64() {
+    }
+
+    fun jvmStubs() {
+    }
+
+    fun linuxX64Stubs() {
     }
 
     fun wasmJs() {
