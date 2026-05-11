@@ -57,8 +57,8 @@ afterEvaluate {
     val goldenDir = File(project.rootDir, "../androidx-main/golden$subdirectory")
     pluginManager.withPlugin("com.android.library") {
         extensions.configure<com.android.build.api.dsl.LibraryExtension>("android") {
-            sourceSets.getByName("androidTest").assets.srcDir(project.fileTree(goldenDir))
-            sourceSets.getByName("test").assets.srcDir(project.fileTree(goldenDir))
+            sourceSets.getByName("androidTest").assets.srcDir(project.files(goldenDir))
+            sourceSets.getByName("test").assets.srcDir(project.files(goldenDir))
         }
     }
 }
