@@ -321,12 +321,18 @@ toStub.sorted().forEach(::stub)
 gradle.beforeProject {
     val importedRoot = androidxRoot.canonicalFile.toPath()
     val projectDirPath = projectDir.canonicalFile.toPath()
-    if (path !in sourceProjects && projectDirPath.startsWith(importedRoot)) {
-        error(
-            "Project $path is not listed in androidx.sources but points at imported AndroidX " +
-                "directory $projectDir. Add it explicitly to androidx.sources, enable it via " +
-                "androidx.recursiveProjectDiscovery, or keep it stubbed."
-        )
+    if (projectDirPath.startsWith(importedRoot)) {
+        // Redirect build directory to overlay to avoid polluting the external checkout.
+        val overlayBuildDir = file("${settingsDir}/build/androidx-builds/${path.removePrefix(":").replace(':', '-')}")
+        layout.buildDirectory.set(overlayBuildDir)
+
+        if (path !in sourceProjects) {
+            error(
+                "Project $path is not listed in androidx.sources but points at imported AndroidX " +
+                    "directory $projectDir. Add it explicitly to androidx.sources, enable it via " +
+                    "androidx.recursiveProjectDiscovery, or keep it stubbed."
+            )
+        }
     }
 }
 
