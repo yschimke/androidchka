@@ -69,11 +69,11 @@ open class AndroidXMultiplatformExtension(internal val project: Project) {
         // Auto-enable host & device test compilations when the matching source dirs exist on
         // disk — upstream's projects expect `androidUnitTest` / `androidDeviceTest` source sets
         // to materialize without an explicit `withHostTest {}` / `withDeviceTest {}` call.
-        if (java.io.File(project.projectDir, "src/androidUnitTest").isDirectory || java.io.File(project.projectDir, "src/androidHostTest").isDirectory) {
+        if (!project.fileTree("src/androidUnitTest").isEmpty || !project.fileTree("src/androidHostTest").isEmpty) {
             target.withHostTest { }
             kotlin.sourceSets.maybeCreate("androidHostTest")
         }
-        if (java.io.File(project.projectDir, "src/androidDeviceTest").isDirectory) {
+        if (!project.fileTree("src/androidDeviceTest").isEmpty) {
             target.withDeviceTest { }
         }
     }
