@@ -168,6 +168,7 @@ val autoSourcePaths: Set<String> = setOf(
     ":test:uiautomator:uiautomator-shell",
     ":test:uiautomator:uiautomator-lint",
     ":compose:remote:remote-player-compose-testutils",
+    ":compose:remote:remote-testing",
     ":compose:test-utils",
     ":test:screenshot:screenshot",
     ":test:screenshot:screenshot-proto",
@@ -273,7 +274,7 @@ sourceEntries.forEach { entry ->
     val eqIdx = entry.indexOf('=')
     val path = if (eqIdx >= 0) entry.substring(0, eqIdx).trim() else entry
     val relativeDir = if (eqIdx >= 0) entry.substring(eqIdx + 1).trim()
-                      else path.removePrefix(":").replace(':', '/')
+                      else upstreamPathToDir[path] ?: path.removePrefix(":").replace(':', '/')
     expandSource(path, File(androidxRoot, relativeDir), explicit = true)
 }
 
