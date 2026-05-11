@@ -160,6 +160,7 @@ val autoSourcePaths: Set<String> = setOf(
     ":internal-testutils-truth",
     ":internal-testutils-benchmark-macro",
     ":compose:remote:remote-core-testutils",
+    ":compose:remote:remote-creation",
     ":kruth:kruth",
     // `:compose:test-utils` and `:compose:benchmark-utils` are heavily referenced but use KMP
     // targets (`desktop()`, `androidHostTest`) the overlay's KMP shim doesn't fake yet — they

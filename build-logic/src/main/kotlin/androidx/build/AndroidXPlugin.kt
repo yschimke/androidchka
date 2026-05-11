@@ -116,6 +116,20 @@ internal object SnapshotConfig {
         )
     }
 
+    private fun composeVersion(project: Project): String {
+        val f = rootFile(project, "androidx/libraryversions.toml")
+        if (f.isFile) {
+            val text = f.readText()
+            val match = Regex("""COMPOSE\s*=\s*["']([^"']+)["']""").find(text)
+            if (match != null) {
+                val version = match.groupValues[1]
+                val baseVersion = version.substringBefore("-")
+                return "$baseVersion-SNAPSHOT"
+            }
+        }
+        return "1.0.0-SNAPSHOT"
+    }
+
     private fun coordinateFor(path: String): String = coordinatesFor(path).toString()
 
     /**
@@ -140,7 +154,13 @@ internal object SnapshotConfig {
                     if (selector is ProjectComponentSelector) {
                         val target = project.rootProject.findProject(selector.projectPath)
                         if (target != null && isStub(target)) {
-                            val module = "${coordinateFor(selector.projectPath)}:1.0.0-SNAPSHOT"
+                            val coords = coordinatesFor(selector.projectPath)
+                            val version = if (coords.group.startsWith("androidx.compose") && !coords.group.startsWith("androidx.compose.remote")) {
+                                composeVersion(project)
+                            } else {
+                                "1.0.0-SNAPSHOT"
+                            }
+                            val module = "$coords:$version"
                             useTarget(module, "overlay: stub -> androidx.dev snapshot $buildId")
                         }
                     }
