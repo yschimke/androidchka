@@ -8,6 +8,7 @@ import org.gradle.kotlin.dsl.configure
 import org.gradle.kotlin.dsl.create
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import java.io.File
+import com.google.protobuf.gradle.*
 import java.util.Properties
 
 /**
@@ -24,6 +25,30 @@ class AndroidXPlugin : Plugin<Project> {
     override fun apply(project: Project) {
         project.extensions.create<AndroidXExtension>("androidx", project)
         project.extensions.create<AndroidXMultiplatformExtension>("androidXMultiplatform", project)
+        project.extensions.create("lint", LintStub::class.java)
+
+        project.plugins.withId("com.google.protobuf") {
+            project.extensions.configure<com.google.protobuf.gradle.ProtobufExtension>("protobuf") {
+                protoc {
+                    artifact = "com.google.protobuf:protoc:3.25.1"
+                }
+                generateProtoTasks {
+                    all().forEach { task ->
+                        task.builtins {
+                            getByName("java") {
+                                option("lite")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        project.plugins.withType(com.android.build.gradle.api.AndroidBasePlugin::class.java) {
+            project.extensions.configure<com.android.build.api.dsl.CommonExtension>("android") {
+                lint.abortOnError = false
+            }
+        }
 
         // Claim the canonical Maven coordinates for this project so a downstream `includeBuild`
         // can auto-substitute `androidx.<group>:<artifact>:<version>` to this project (Gradle
@@ -162,5 +187,11 @@ internal object SnapshotConfig {
                 }
             }
         }
+    }
+}
+
+open class LintStub {
+    fun lint(block: groovy.lang.Closure<*>) {
+        // no-op
     }
 }

@@ -174,6 +174,13 @@ open class AndroidXMultiplatformExtension(internal val project: Project) {
         // no-op
     }
 
+    fun addNativeLibrariesToVariantAssets(
+        target: Any?,
+        nativeCompilation: Any?
+    ) {
+        // no-op
+    }
+
     private fun configure(target: Any, block: Closure<*>) {
         block.delegate = target
         block.resolveStrategy = Closure.DELEGATE_FIRST
