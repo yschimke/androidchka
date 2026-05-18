@@ -13,4 +13,12 @@ object BundleInsideHelper {
         val bundleInside = project.configurations.maybeCreate("bundleInside")
         project.configurations.getByName("implementation").extendsFrom(bundleInside)
     }
+
+    @JvmStatic
+    fun forInsideLintJar(
+        project: Project,
+    ) {
+        val bundleInside = project.configurations.maybeCreate("bundleInside")
+        project.configurations.getByName("implementation").extendsFrom(bundleInside)
+    }
 }
