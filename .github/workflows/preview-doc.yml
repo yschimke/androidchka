@@ -1,9 +1,10 @@
 name: Preview Doc
 
-# Renders the RemoteCompose @Preview functions with compose-preview and publishes
-# a browsable Markdown gallery to the `previews` branch (the "doc with previews
-# listed"). Scoped to :compose:remote / :wear:compose:remote — the modules the
-# androidchka.extras convention plugin applies ee.schimke.composeai.preview to.
+# Renders every @Preview in androidchka's source modules (androidx.sources) with
+# compose-preview and publishes a browsable Markdown gallery to the `previews`
+# branch (the "doc with previews listed"). The androidchka.extras convention plugin
+# applies ee.schimke.composeai.preview to the source modules; this renders whatever
+# it discovers — it's not tied to any particular library.
 #
 # NOTE: first-run shakeout expected. This workflow checks out the ~1 GB
 # yschimke/androidx source (the `androidx` symlink target) and needs an Android
@@ -33,9 +34,9 @@ jobs:
       - name: Checkout androidchka
         uses: actions/checkout@v4
 
-      # The RemoteCompose source modules build from the upstream AndroidX checkout
-      # that the committed `androidx` symlink points at. Fetch the fork's
-      # androidx-main and repoint the symlink at it for this run (not committed).
+      # The source modules build from the upstream AndroidX checkout that the
+      # committed `androidx` symlink points at. Fetch the fork's androidx-main and
+      # repoint the symlink at it for this run (not committed).
       - name: Checkout androidx source
         uses: actions/checkout@v4
         with:
@@ -72,8 +73,8 @@ jobs:
           version: ${{ steps.ver.outputs.version }}
 
       # The convention plugin already applies ee.schimke.composeai.preview to the
-      # RemoteCompose modules, so the CLI's auto-inject detects an included-build
-      # provider and stays out of the way; render walks the discovered modules.
+      # source modules, so the CLI's auto-inject detects an included-build provider
+      # and stays out of the way; render walks every discovered module.
       - name: Render previews
         run: compose-preview render --verbose
 
@@ -91,5 +92,5 @@ jobs:
           git add -A
           git -c user.name='github-actions[bot]' \
               -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
-              commit -q -m "Update RemoteCompose preview doc (${GITHUB_SHA:0:8})"
+              commit -q -m "Update Compose preview doc (${GITHUB_SHA:0:8})"
           git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$DOCS_BRANCH"

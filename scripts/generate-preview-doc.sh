@@ -22,10 +22,10 @@ mkdir -p "$OUT_DIR/images"
 
 INDEX="$OUT_DIR/README.md"
 {
-  echo "# RemoteCompose previews"
+  echo "# Compose previews"
   echo
-  echo "Rendered by the \`Preview Doc\` GitHub Actions workflow via \`compose-preview\`."
-  echo "Source modules: \`:compose:remote\`, \`:wear:compose:remote\` (see \`local.properties.example\`)."
+  echo "Every \`@Preview\` discovered in androidchka's source modules (\`androidx.sources\`),"
+  echo "rendered by the \`Preview Doc\` GitHub Actions workflow via \`compose-preview\`."
   echo
   echo "_Generated $(date -u +%Y-%m-%dT%H:%M:%SZ) from commit ${GITHUB_SHA:-local}._"
   echo
