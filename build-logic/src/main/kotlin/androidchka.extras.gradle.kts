@@ -1,5 +1,3 @@
-import org.gradle.api.artifacts.ProjectDependency
-
 // User-editable convention plugin applied to every source project on top of the AndroidXPlugin
 // shim. Edit freely — anything that's a valid Gradle Kotlin DSL build script works here.
 //
@@ -7,13 +5,14 @@ import org.gradle.api.artifacts.ProjectDependency
 // `version` in their plugins block; the version must be on the build-logic classpath):
 //
 //   1. In `build-logic/build.gradle.kts` add an `implementation` for the plugin marker:
-//        implementation("xxx:xxx.gradle.plugin:0.10.4")
+//        implementation("ee.schimke.composeai.preview:ee.schimke.composeai.preview.gradle.plugin:0.15.13")
 //   2. Below, declare the id (without a version) — `apply false` if you want to gate the
 //      apply on per-project conditions.
 
 plugins {
     // Stage the plugin classes on the project classpath without applying them — we
     // conditionally apply below.
+    id("ee.schimke.composeai.preview") apply false
     id("com.gradleup.tapmoc") apply false
 }
 
@@ -32,5 +31,25 @@ afterEvaluate {
             sourceSets.getByName("androidTest").assets.srcDir(project.files(goldenDir))
             sourceSets.getByName("test").assets.srcDir(project.files(goldenDir))
         }
+    }
+}
+
+// Compose Preview: applied *only* to the RemoteCompose trees (`:compose:remote`,
+// `:wear:compose:remote`) — not auto-applied to every Android module. Those are the modules we
+// publish previews for; they're also androidchka's default `androidx.sources` (see
+// local.properties.example). To publish previews for another tree, add its path prefix here and
+// to androidx.sources.
+//
+// Applied *eagerly* via `pluginManager.withPlugin(...)` (not `afterEvaluate {}`): the plugin
+// registers its render/discover tasks from an `androidComponents.onVariants {}` hook, which only
+// fires if the plugin is applied inside the normal configuration window — applying from
+// `afterEvaluate {}` runs after AGP locks the variants and the variant-backed tasks
+// (`composePreviewRenderAll`/`composePreviewDiscover`) never register. The plugin no-ops on
+// modules with no `@Preview`s, so applying it to the whole tree is harmless.
+val publishesPreviews = path == ":compose:remote" || path.startsWith(":compose:remote:") ||
+    path == ":wear:compose:remote" || path.startsWith(":wear:compose:remote:")
+if (publishesPreviews) {
+    listOf("com.android.library", "com.android.application").forEach { agpId ->
+        pluginManager.withPlugin(agpId) { pluginManager.apply("ee.schimke.composeai.preview") }
     }
 }
