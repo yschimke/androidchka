@@ -57,24 +57,23 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Read pinned plugin version
+      - name: Read pinned CLI version
         id: ver
         run: |
           set -euo pipefail
-          v="$(grep -E '^composeAiPreviewVersion=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')"
-          [ -n "$v" ] || { echo "composeAiPreviewVersion missing from gradle.properties" >&2; exit 1; }
+          v="$(grep -E '^composePreviewCliVersion=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')"
+          [ -n "$v" ] || { echo "composePreviewCliVersion missing from gradle.properties" >&2; exit 1; }
           echo "version=$v" >> "$GITHUB_OUTPUT"
 
       # Consumer-facing CLI install (downloads the release tarball, adds it to PATH).
-      # Pinned to the same version as the applied plugin to avoid CLI/plugin skew.
       - name: Install compose-preview CLI
         uses: yschimke/compose-ai-tools/.github/actions/install@v0.15.13
         with:
           version: ${{ steps.ver.outputs.version }}
 
-      # The convention plugin already applies ee.schimke.composeai.preview to the
-      # source modules, so the CLI's auto-inject detects an included-build provider
-      # and stays out of the way; render walks every discovered module.
+      # The build applies no compose-preview plugin — the CLI auto-injects a matching
+      # plugin via `--init-script` at render time and walks every discovered Android
+      # source module. (No convention-plugin apply means no double-apply to manage.)
       - name: Render previews
         run: compose-preview render --verbose
 
