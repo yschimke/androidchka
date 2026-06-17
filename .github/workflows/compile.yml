@@ -1,0 +1,62 @@
+name: Compile
+
+# Compiles androidchka's source modules (the projects listed in androidx.sources,
+# built from the upstream AndroidX checkout). A fast sanity check that the overlay
+# still configures and the sourced AndroidX projects build against the pinned
+# androidx.dev snapshot.
+#
+# NOTE: first-run shakeout expected — this checks out the ~1 GB yschimke/androidx
+# source (the `androidx` symlink target) and needs an Android SDK matching
+# androidx's compileSdk (AGP 9.x alpha). Adjust the androidx ref / SDK packages
+# below if configuration or compilation fails.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: compile-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout androidchka
+        uses: actions/checkout@v4
+
+      # The source modules build from the upstream AndroidX checkout the committed
+      # `androidx` symlink points at. Fetch the fork's androidx-main and repoint the
+      # symlink at it for this run (not committed).
+      - name: Checkout androidx source
+        uses: actions/checkout@v4
+        with:
+          repository: yschimke/androidx
+          ref: androidx-main
+          path: .androidx-src
+          fetch-depth: 1
+
+      - name: Wire androidx symlink
+        run: ln -sfn .androidx-src androidx
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      # `assembleDebug` is an unqualified task name, so Gradle runs it on every
+      # project that has it — i.e. the Android source modules. Stubs (no build
+      # script) and the overlay root have no such task and are skipped, so this
+      # naturally scopes to the configured source set (androidx.sources). It both
+      # configures the overlay and compiles the source modules.
+      - name: Compile source modules
+        run: ./gradlew assembleDebug --stacktrace
