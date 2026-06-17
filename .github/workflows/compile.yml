@@ -5,7 +5,7 @@ name: Compile
 # still configures and the sourced AndroidX projects build against the pinned
 # androidx.dev snapshot.
 #
-# NOTE: first-run shakeout expected — this checks out the ~1 GB yschimke/androidx
+# NOTE: first-run shakeout expected — this checks out the ~1 GB androidx/androidx
 # source (the `androidx` symlink target) and needs an Android SDK matching
 # androidx's compileSdk (AGP 9.x alpha). Adjust the androidx ref / SDK packages
 # below if configuration or compilation fails.
@@ -36,7 +36,7 @@ jobs:
       - name: Checkout androidx source
         uses: actions/checkout@v4
         with:
-          repository: yschimke/androidx
+          repository: androidx/androidx
           ref: androidx-main
           path: .androidx-src
           fetch-depth: 1
