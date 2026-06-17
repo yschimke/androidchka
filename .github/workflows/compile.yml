@@ -53,10 +53,16 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      # `assembleDebug` is an unqualified task name, so Gradle runs it on every
-      # project that has it — i.e. the Android source modules. Stubs (no build
+      # `compileDebugSources` is an unqualified task name, so Gradle runs it on
+      # every project that has it — i.e. the Android source modules (and it
+      # transitively compiles their source-project dependencies). Stubs (no build
       # script) and the overlay root have no such task and are skipped, so this
-      # naturally scopes to the configured source set (androidx.sources). It both
-      # configures the overlay and compiles the source modules.
+      # naturally scopes to the configured source set (androidx.sources).
+      #
+      # We compile rather than `assembleDebug`: assembling the AAR resolves the
+      # `lintPublish` configuration (bundling lint checks into the artifact), which
+      # drags in lint coordinates the androidx.dev snapshot doesn't publish
+      # (e.g. androidx.compose.lint:common) — unrelated to whether the source
+      # compiles. compileDebugSources skips AAR bundling / lint publishing.
       - name: Compile source modules
-        run: ./gradlew assembleDebug --stacktrace
+        run: ./gradlew compileDebugSources --stacktrace
