@@ -1,0 +1,96 @@
+name: Preview Doc
+
+# Renders every @Preview in androidchka's source modules (androidx.sources) with
+# compose-preview and publishes a browsable Markdown gallery to the `previews`
+# branch (the "doc with previews listed"). The androidchka.extras convention plugin
+# applies ee.schimke.composeai.preview to the source modules; this renders whatever
+# it discovers — it's not tied to any particular library.
+#
+# NOTE: first-run shakeout expected. This workflow checks out the ~1 GB
+# yschimke/androidx source (the `androidx` symlink target) and needs an Android
+# SDK matching androidx's compileSdk (AGP 9.x alpha). Adjust the SDK packages /
+# androidx ref below if the render step fails.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Single in-flight publish; newer pushes supersede older doc builds.
+concurrency:
+  group: preview-doc
+  cancel-in-progress: true
+
+permissions:
+  contents: write  # force-push the generated doc to the `previews` branch
+
+env:
+  DOCS_BRANCH: previews
+
+jobs:
+  render-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout androidchka
+        uses: actions/checkout@v4
+
+      # The source modules build from the upstream AndroidX checkout that the
+      # committed `androidx` symlink points at. Fetch the fork's androidx-main and
+      # repoint the symlink at it for this run (not committed).
+      - name: Checkout androidx source
+        uses: actions/checkout@v4
+        with:
+          repository: yschimke/androidx
+          ref: androidx-main
+          path: .androidx-src
+          fetch-depth: 1
+
+      - name: Wire androidx symlink
+        run: ln -sfn .androidx-src androidx
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Read pinned plugin version
+        id: ver
+        run: |
+          set -euo pipefail
+          v="$(grep -E '^composeAiPreviewVersion=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')"
+          [ -n "$v" ] || { echo "composeAiPreviewVersion missing from gradle.properties" >&2; exit 1; }
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      # Consumer-facing CLI install (downloads the release tarball, adds it to PATH).
+      # Pinned to the same version as the applied plugin to avoid CLI/plugin skew.
+      - name: Install compose-preview CLI
+        uses: yschimke/compose-ai-tools/.github/actions/install@v0.15.13
+        with:
+          version: ${{ steps.ver.outputs.version }}
+
+      # The convention plugin already applies ee.schimke.composeai.preview to the
+      # source modules, so the CLI's auto-inject detects an included-build provider
+      # and stays out of the way; render walks every discovered module.
+      - name: Render previews
+        run: compose-preview render --verbose
+
+      - name: Generate preview doc
+        run: scripts/generate-preview-doc.sh _site
+
+      - name: Publish doc to ${{ env.DOCS_BRANCH }} branch
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd _site
+          git init -q
+          git checkout -q -b "$DOCS_BRANCH"
+          git add -A
+          git -c user.name='github-actions[bot]' \
+              -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit -q -m "Update Compose preview doc (${GITHUB_SHA:0:8})"
+          git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$DOCS_BRANCH"
