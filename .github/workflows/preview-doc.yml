@@ -7,7 +7,7 @@ name: Preview Doc
 # it discovers — it's not tied to any particular library.
 #
 # NOTE: first-run shakeout expected. This workflow checks out the ~1 GB
-# yschimke/androidx source (the `androidx` symlink target) and needs an Android
+# androidx/androidx source (the `androidx` symlink target) and needs an Android
 # SDK matching androidx's compileSdk (AGP 9.x alpha). Adjust the SDK packages /
 # androidx ref below if the render step fails.
 
@@ -40,7 +40,7 @@ jobs:
       - name: Checkout androidx source
         uses: actions/checkout@v4
         with:
-          repository: yschimke/androidx
+          repository: androidx/androidx
           ref: androidx-main
           path: .androidx-src
           fetch-depth: 1
