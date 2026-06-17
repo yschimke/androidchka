@@ -61,8 +61,8 @@ jobs:
         id: ver
         run: |
           set -euo pipefail
-          v="$(grep -E '^composePreviewCliVersion=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')"
-          [ -n "$v" ] || { echo "composePreviewCliVersion missing from gradle.properties" >&2; exit 1; }
+          v="$(grep -E '^composeAiPreviewVersion=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')"
+          [ -n "$v" ] || { echo "composeAiPreviewVersion missing from gradle.properties" >&2; exit 1; }
           echo "version=$v" >> "$GITHUB_OUTPUT"
 
       # Consumer-facing CLI install (downloads the release tarball, adds it to PATH).
@@ -71,9 +71,10 @@ jobs:
         with:
           version: ${{ steps.ver.outputs.version }}
 
-      # The build applies no compose-preview plugin — the CLI auto-injects a matching
-      # plugin via `--init-script` at render time and walks every discovered Android
-      # source module. (No convention-plugin apply means no double-apply to manage.)
+      # The androidchka.extras convention plugin applies ee.schimke.composeai.preview to the
+      # source modules (it must — auto-inject can't see AGP here; see compose-ai-tools#1939 and
+      # the convention plugin's comment). The CLI detects that included-build provider and skips
+      # its own auto-inject, then renders every discovered module.
       - name: Render previews
         run: compose-preview render --verbose
 
