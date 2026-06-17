@@ -14,9 +14,10 @@
 # Default is main, which avoids accidentally configuring nested sample/test/benchmark projects.
 
 # Default config: the RemoteCompose trees. `samples` is included because the @Preview functions
-# that compose-preview renders live in the `*-samples` modules under these paths. The convention
-# plugin (androidchka.extras.gradle.kts) applies ee.schimke.composeai.preview to exactly these
-# `:compose:remote` / `:wear:compose:remote` projects.
+# that compose-preview renders live in the `*-samples` modules. The convention plugin
+# (androidchka.extras.gradle.kts) applies ee.schimke.composeai.preview to every Android *source*
+# module — i.e. whatever you list here — so changing androidx.sources changes which modules get
+# previews; there's no hardcoded module list.
 androidx.sources=:compose:remote,:wear:compose:remote
 androidx.recursiveProjectDiscovery=main,samples
 

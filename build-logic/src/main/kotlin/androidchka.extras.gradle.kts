@@ -34,22 +34,19 @@ afterEvaluate {
     }
 }
 
-// Compose Preview: applied *only* to the RemoteCompose trees (`:compose:remote`,
-// `:wear:compose:remote`) — not auto-applied to every Android module. Those are the modules we
-// publish previews for; they're also androidchka's default `androidx.sources` (see
-// local.properties.example). To publish previews for another tree, add its path prefix here and
-// to androidx.sources.
+// Compose Preview: applied to every Android *source* module — the selection is driven by
+// `androidx.sources` (local.properties.example), not a hardcoded module list. This convention
+// plugin only ever runs on source projects: it's applied by AndroidXPlugin (build-logic), which a
+// project only gets from a real upstream build.gradle; the overlay's stubs have no build script,
+// so they never reach here. Change `androidx.sources` and the preview set follows automatically.
 //
 // Applied *eagerly* via `pluginManager.withPlugin(...)` (not `afterEvaluate {}`): the plugin
 // registers its render/discover tasks from an `androidComponents.onVariants {}` hook, which only
 // fires if the plugin is applied inside the normal configuration window — applying from
 // `afterEvaluate {}` runs after AGP locks the variants and the variant-backed tasks
-// (`composePreviewRenderAll`/`composePreviewDiscover`) never register. The plugin no-ops on
-// modules with no `@Preview`s, so applying it to the whole tree is harmless.
-val publishesPreviews = path == ":compose:remote" || path.startsWith(":compose:remote:") ||
-    path == ":wear:compose:remote" || path.startsWith(":wear:compose:remote:")
-if (publishesPreviews) {
-    listOf("com.android.library", "com.android.application").forEach { agpId ->
-        pluginManager.withPlugin(agpId) { pluginManager.apply("ee.schimke.composeai.preview") }
-    }
+// (`composePreviewRenderAll`/`composePreviewDiscover`) never register. Gated on the AGP plugins so
+// only Android modules get it; the plugin further no-ops on modules with no `@Preview`s, so
+// applying it across the source set is harmless.
+listOf("com.android.library", "com.android.application").forEach { agpId ->
+    pluginManager.withPlugin(agpId) { pluginManager.apply("ee.schimke.composeai.preview") }
 }
