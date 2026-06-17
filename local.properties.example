@@ -14,10 +14,16 @@
 # Default is main, which avoids accidentally configuring nested sample/test/benchmark projects.
 
 # Default config: the RemoteCompose trees. `samples` is included because the @Preview functions
-# live in the `*-samples` modules. The Preview Doc CI workflow renders previews for these source
-# modules via the compose-preview CLI, which auto-injects the plugin at render time (nothing is
-# applied in the build). Change androidx.sources to change which modules get previews.
-androidx.sources=:compose:remote,:wear:compose:remote
+# live in the `*-samples` modules. The androidchka.extras convention plugin applies
+# ee.schimke.composeai.preview to these Android source modules, and the Preview Doc CI workflow
+# renders them. Change androidx.sources to change which modules get previews.
+#
+# The two *-testutils modules are listed explicitly because the renders pull each module's
+# *unit-test* runtime classpath (Robolectric), which depends on these INTERNAL_TEST_LIBRARY
+# modules. They're name-classified as test modules, so `recursiveProjectDiscovery=main,samples`
+# would otherwise stub them → resolve from the androidx.dev snapshot, where unpublished test-utils
+# don't exist. Explicit entries bypass that filter and build them from source.
+androidx.sources=:compose:remote,:wear:compose:remote,:compose:remote:remote-core-testutils,:compose:remote:remote-player-compose-testutils
 androidx.recursiveProjectDiscovery=main,samples
 
 # Extra Gradle config (additional plugins, dependencies, task tweaks) is applied via the
