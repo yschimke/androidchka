@@ -45,6 +45,7 @@ open class AndroidXMultiplatformExtension(internal val project: Project) {
                 }
             }
         }
+        kotlin.sourceSets.maybeCreate("nonJvmMain")
     }
 
     private val kotlin: KotlinMultiplatformExtension
@@ -63,14 +64,16 @@ open class AndroidXMultiplatformExtension(internal val project: Project) {
         val target = (kotlin as ExtensionAware).extensions.getByType(
             KotlinMultiplatformAndroidLibraryTarget::class.java
         )
+        target.compileSdk = 37
         configure(target, block)
         // Auto-enable host & device test compilations when the matching source dirs exist on
         // disk — upstream's projects expect `androidUnitTest` / `androidDeviceTest` source sets
         // to materialize without an explicit `withHostTest {}` / `withDeviceTest {}` call.
-        if (java.io.File(project.projectDir, "src/androidUnitTest").isDirectory) {
+        if (!project.fileTree("src/androidUnitTest").isEmpty || !project.fileTree("src/androidHostTest").isEmpty) {
             target.withHostTest { }
+            kotlin.sourceSets.maybeCreate("androidHostTest")
         }
-        if (java.io.File(project.projectDir, "src/androidDeviceTest").isDirectory) {
+        if (!project.fileTree("src/androidDeviceTest").isEmpty) {
             target.withDeviceTest { }
         }
     }
@@ -78,6 +81,74 @@ open class AndroidXMultiplatformExtension(internal val project: Project) {
     /** Add a JVM target. Mirrors upstream `androidXMultiplatform { jvm() }`. */
     fun jvm() {
         kotlin.jvm()
+    }
+
+    fun mac() {
+        ensureKmpApplied()
+        kotlin.sourceSets.maybeCreate("nativeMain")
+        kotlin.sourceSets.maybeCreate("nativeTest")
+    }
+
+    fun linux() {
+        ensureKmpApplied()
+        kotlin.sourceSets.maybeCreate("nativeMain")
+        kotlin.sourceSets.maybeCreate("nativeTest")
+    }
+
+    fun ios() {
+        ensureKmpApplied()
+        kotlin.sourceSets.maybeCreate("nativeMain")
+        kotlin.sourceSets.maybeCreate("nativeTest")
+    }
+
+    fun watchos() {
+        ensureKmpApplied()
+        kotlin.sourceSets.maybeCreate("nativeMain")
+        kotlin.sourceSets.maybeCreate("nativeTest")
+    }
+
+    fun tvos() {
+        ensureKmpApplied()
+        kotlin.sourceSets.maybeCreate("nativeMain")
+        kotlin.sourceSets.maybeCreate("nativeTest")
+    }
+
+    fun androidNative() {
+        ensureKmpApplied()
+        kotlin.sourceSets.maybeCreate("nativeMain")
+        kotlin.sourceSets.maybeCreate("nativeTest")
+    }
+
+    fun mingwX64() {
+        ensureKmpApplied()
+        kotlin.sourceSets.maybeCreate("nativeMain")
+        kotlin.sourceSets.maybeCreate("nativeTest")
+    }
+
+    fun jvmStubs() {
+    }
+
+    fun linuxX64Stubs() {
+    }
+
+    fun desktop() {
+        ensureKmpApplied()
+        kotlin.sourceSets.maybeCreate("desktopMain")
+        kotlin.sourceSets.maybeCreate("desktopTest")
+    }
+
+    fun wasmJs() {
+        ensureKmpApplied()
+        kotlin.sourceSets.maybeCreate("wasmJsMain")
+        kotlin.sourceSets.maybeCreate("wasmJsTest")
+        kotlin.sourceSets.maybeCreate("webTest")
+    }
+
+    fun js() {
+        ensureKmpApplied()
+        kotlin.sourceSets.maybeCreate("jsMain")
+        kotlin.sourceSets.maybeCreate("jsTest")
+        kotlin.sourceSets.maybeCreate("webTest")
     }
 
     fun jvm(block: Closure<*>) {
@@ -93,6 +164,21 @@ open class AndroidXMultiplatformExtension(internal val project: Project) {
      *  by the time this closure executes. */
     fun sourceSets(block: Closure<*>) {
         configure(kotlin.sourceSets, block)
+    }
+
+    fun createNativeCompilation(
+        name: String,
+        type: Any,
+        block: Closure<*>
+    ) {
+        // no-op
+    }
+
+    fun addNativeLibrariesToVariantAssets(
+        target: Any?,
+        nativeCompilation: Any?
+    ) {
+        // no-op
     }
 
     private fun configure(target: Any, block: Closure<*>) {

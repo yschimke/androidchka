@@ -13,6 +13,25 @@ plugins {
     // Stage the plugin classes on the project classpath without applying them — we
     // conditionally apply below.
     id("ee.schimke.composeai.preview") apply false
+    id("com.gradleup.tapmoc") apply false
+}
+
+afterEvaluate {
+    pluginManager.apply("com.gradleup.tapmoc")
+    tapmoc {
+        java(21)
+    }
+}
+
+afterEvaluate {
+    val subdirectory = path.replace(":", "/")
+    val goldenDir = File(project.rootDir, "../androidx-main/golden$subdirectory")
+    pluginManager.withPlugin("com.android.library") {
+        extensions.configure<com.android.build.api.dsl.LibraryExtension>("android") {
+            sourceSets.getByName("androidTest").assets.srcDir(project.files(goldenDir))
+            sourceSets.getByName("test").assets.srcDir(project.files(goldenDir))
+        }
+    }
 }
 
 /**
@@ -36,7 +55,9 @@ listOf("com.android.library", "com.android.application").forEach { agpId ->
 }
 
 // NOTE: Preview discovery under AGP 9.x built-in Kotlin (`built_in_kotlinc`) requires
-// compose-preview >= 0.15.12 (see composeAiPreviewVersion in gradle.properties). Earlier versions
-// discover 0 previews here: 0.15.9 scanned only legacy KGP class dirs; 0.15.12 added built-in-
-// Kotlin support and canonical-path matching for symlinked build trees (androidchka's `androidx`
-// symlink). https://github.com/yschimke/compose-ai-tools/issues/1924
+// compose-preview >= 0.15.12; we pin 0.15.13 (see composeAiPreviewVersion in gradle.properties),
+// which also carries the CLI-side fix for discovering previews when the plugin is applied via a
+// convention plugin like this one (https://github.com/yschimke/compose-ai-tools/issues/1939).
+// Earlier plugin versions discover 0 previews here: 0.15.9 scanned only legacy KGP class dirs;
+// 0.15.12 added built-in-Kotlin support and canonical-path matching for symlinked build trees
+// (androidchka's `androidx` symlink). https://github.com/yschimke/compose-ai-tools/issues/1924

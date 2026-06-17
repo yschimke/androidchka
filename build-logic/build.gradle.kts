@@ -4,6 +4,10 @@ plugins {
     `kotlin-dsl`
 }
 
+kotlin {
+    jvmToolchain(21)
+}
+
 /** Read a property from the overlay root's `gradle.properties` (one level above build-logic). */
 fun overlayProperty(name: String, default: String? = null): String {
     val props = Properties().apply {
@@ -41,6 +45,8 @@ dependencies {
     // Versions live in the overlay's `gradle.properties` (build-logic is an included build, so
     // its own rootProject doesn't see the overlay's properties — we read them explicitly).
     implementation("ee.schimke.composeai.preview:ee.schimke.composeai.preview.gradle.plugin:${overlayProperty("composeAiPreviewVersion")}")
+    implementation("com.gradleup.tapmoc:tapmoc-gradle-plugin:0.4.2")
+    implementation("com.google.protobuf:protobuf-gradle-plugin:0.9.4")
 }
 
 gradlePlugin {

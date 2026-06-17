@@ -18,6 +18,7 @@ pluginManagement {
     plugins {
         id("com.android.library") version androidchkaAgpVersion
         id("com.android.application") version androidchkaAgpVersion
+        id("com.google.protobuf") version "0.9.4"
         id("org.jetbrains.kotlin.android") version "2.3.20"
         id("org.jetbrains.kotlin.jvm") version "2.3.20"
         id("org.jetbrains.kotlin.plugin.compose") version "2.3.20"
@@ -108,6 +109,8 @@ val supportedPlugins: Set<String> = setOf(
     "org.jetbrains.kotlin.plugin.compose",
     "androidchka.extras",
     "ee.schimke.composeai.preview",
+    "com.gradleup.tapmoc",
+    "com.google.protobuf",
 )
 val pluginIdRegex = Regex("""\b(?:id|alias)\s*\(\s*["']([^"']+)["']""")
 val unsupportedDslMarkers = mapOf<String, String>(
@@ -127,7 +130,7 @@ val unsupportedDslMarkers = mapOf<String, String>(
 val upstreamPathToDir: Map<String, String> = run {
     val upstreamSettings = File(androidxRoot, "settings.gradle")
     if (!upstreamSettings.isFile) return@run emptyMap()
-    val withDir = Regex("""includeProject\(\s*["'](:[^"']+)["']\s*,\s*["']([^"']+)["']""")
+    val withDir = Regex("""includeProject\(\s*["'](:[^"']+)["']\s*,\s*["']([^"']+)["'][^)]*\)""")
     val noDir = Regex("""includeProject\(\s*["'](:[^"']+)["']\s*[,)]""")
     val text = upstreamSettings.readText()
     val map = LinkedHashMap<String, String>()
@@ -158,6 +161,17 @@ val autoSourcePaths: Set<String> = setOf(
     ":internal-testutils-runtime",
     ":internal-testutils-truth",
     ":internal-testutils-benchmark-macro",
+    ":compose:remote:remote-core-testutils",
+    ":compose:remote:remote-creation",
+    ":kruth:kruth",
+    ":test:uiautomator:uiautomator",
+    ":test:uiautomator:uiautomator-shell",
+    ":test:uiautomator:uiautomator-lint",
+    ":compose:remote:remote-player-compose-testutils",
+    ":compose:remote:remote-testing",
+    ":compose:test-utils",
+    ":test:screenshot:screenshot",
+    ":test:screenshot:screenshot-proto",
     // `:compose:test-utils` and `:compose:benchmark-utils` are heavily referenced but use KMP
     // targets (`desktop()`, `androidHostTest`) the overlay's KMP shim doesn't fake yet — they
     // stay as snapshot-resolved stubs.
@@ -203,7 +217,7 @@ fun expandSource(path: String, dir: File, explicit: Boolean = false) {
         }
         // Fall through to recurse — enabled subdirs may host nested projects (e.g. `samples`).
     }
-    val children = dir.listFiles { f -> f.isDirectory && !f.name.startsWith(".") }.orEmpty()
+    val children = dir.listFiles { f -> f.isDirectory && !f.name.startsWith(".") && f.name != "build" }.orEmpty()
         .sortedBy { it.name }
     for (child in children) {
         expandSource("$path:${child.name}", child)
@@ -260,7 +274,7 @@ sourceEntries.forEach { entry ->
     val eqIdx = entry.indexOf('=')
     val path = if (eqIdx >= 0) entry.substring(0, eqIdx).trim() else entry
     val relativeDir = if (eqIdx >= 0) entry.substring(eqIdx + 1).trim()
-                      else path.removePrefix(":").replace(':', '/')
+                      else upstreamPathToDir[path] ?: path.removePrefix(":").replace(':', '/')
     expandSource(path, File(androidxRoot, relativeDir), explicit = true)
 }
 
@@ -301,12 +315,12 @@ fun collectReferenced(): Set<String> = buildSet {
 // entries that weren't visible yet. Two iterations is usually enough for the curated set.
 while (true) {
     val referenced = collectReferenced()
-    val toPromote = referenced.intersect(autoSourcePaths) - sourceProjects
+    val toPromote = referenced.intersect(autoSourcePaths) - sourceProjects - skippedSources.keys
     if (toPromote.isEmpty()) break
     for (path in toPromote.sorted()) {
         val relativeDir = upstreamPathToDir[path]
             ?: error("autoSourcePaths entry $path has no upstream directory mapping")
-        expandSource(path, File(androidxRoot, relativeDir))
+        expandSource(path, File(androidxRoot, relativeDir), explicit = true)
         autoPromoted += path
     }
 }
@@ -319,12 +333,18 @@ toStub.sorted().forEach(::stub)
 gradle.beforeProject {
     val importedRoot = androidxRoot.canonicalFile.toPath()
     val projectDirPath = projectDir.canonicalFile.toPath()
-    if (path !in sourceProjects && projectDirPath.startsWith(importedRoot)) {
-        error(
-            "Project $path is not listed in androidx.sources but points at imported AndroidX " +
-                "directory $projectDir. Add it explicitly to androidx.sources, enable it via " +
-                "androidx.recursiveProjectDiscovery, or keep it stubbed."
-        )
+    if (projectDirPath.startsWith(importedRoot)) {
+        // Redirect build directory to overlay to avoid polluting the external checkout.
+        val overlayBuildDir = file("${settingsDir}/build/androidx-builds/${path.removePrefix(":").replace(':', '-')}")
+        layout.buildDirectory.set(overlayBuildDir)
+
+        if (path !in sourceProjects) {
+            error(
+                "Project $path is not listed in androidx.sources but points at imported AndroidX " +
+                    "directory $projectDir. Add it explicitly to androidx.sources, enable it via " +
+                    "androidx.recursiveProjectDiscovery, or keep it stubbed."
+            )
+        }
     }
 }
 

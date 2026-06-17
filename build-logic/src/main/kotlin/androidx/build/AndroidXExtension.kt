@@ -7,7 +7,7 @@ import org.gradle.api.Project
  * the in-tree build files use, but performs no publishing, sample wiring, golden-image setup,
  * or API-tracking work — those are intentionally out of scope for this slim overlay build.
  */
-open class AndroidXExtension(@Suppress("UNUSED_PARAMETER") project: Project) {
+open class AndroidXExtension(internal val project: Project) {
     var name: String? = null
     var description: String? = null
     var inceptionYear: String? = null
@@ -23,6 +23,8 @@ open class AndroidXExtension(@Suppress("UNUSED_PARAMETER") project: Project) {
     fun samples(@Suppress("UNUSED_PARAMETER") samplesProject: Any?) { /* no-op */ }
     fun addGoldenImageAssets() { /* no-op */ }
     fun deviceTests(@Suppress("UNUSED_PARAMETER") action: Any? = null) { /* no-op */ }
-    fun enableRobolectric() { /* no-op */ }
+    fun enableRobolectric() {
+        project.dependencies.add("testImplementation", "org.robolectric:robolectric:4.12.2")
+    }
     fun useEmojiCompat() { /* no-op */ }
 }

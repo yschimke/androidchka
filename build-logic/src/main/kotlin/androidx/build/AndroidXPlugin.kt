@@ -8,6 +8,7 @@ import org.gradle.kotlin.dsl.configure
 import org.gradle.kotlin.dsl.create
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import java.io.File
+import com.google.protobuf.gradle.*
 import java.util.Properties
 
 /**
@@ -24,6 +25,30 @@ class AndroidXPlugin : Plugin<Project> {
     override fun apply(project: Project) {
         project.extensions.create<AndroidXExtension>("androidx", project)
         project.extensions.create<AndroidXMultiplatformExtension>("androidXMultiplatform", project)
+        project.extensions.create("lint", LintStub::class.java)
+
+        project.plugins.withId("com.google.protobuf") {
+            project.extensions.configure<com.google.protobuf.gradle.ProtobufExtension>("protobuf") {
+                protoc {
+                    artifact = "com.google.protobuf:protoc:3.25.1"
+                }
+                generateProtoTasks {
+                    all().forEach { task ->
+                        task.builtins {
+                            getByName("java") {
+                                option("lite")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        project.plugins.withType(com.android.build.gradle.api.AndroidBasePlugin::class.java) {
+            project.extensions.configure<com.android.build.api.dsl.CommonExtension>("android") {
+                lint.abortOnError = false
+            }
+        }
 
         // Claim the canonical Maven coordinates for this project so a downstream `includeBuild`
         // can auto-substitute `androidx.<group>:<artifact>:<version>` to this project (Gradle
@@ -72,16 +97,6 @@ class AndroidXPlugin : Plugin<Project> {
  * project-path → Maven-coordinate substitution that swaps stub projects for snapshot artifacts.
  */
 internal object SnapshotConfig {
-    private fun rootFile(project: Project, name: String): File =
-        project.rootProject.layout.projectDirectory.file(name).asFile
-
-    private fun loadProps(project: Project): Properties {
-        val f = rootFile(project, "snapshots.properties")
-        val p = Properties()
-        if (f.isFile) f.inputStream().use(p::load)
-        return p
-    }
-
     /**
      * Hand-curated overrides for paths whose Maven coordinates don't follow the standard
      * `:a:b:c` → `androidx.a.b:c` rule (e.g. samples artifacts published under flattened names).
@@ -91,9 +106,13 @@ internal object SnapshotConfig {
             "androidx.wear.compose:compose-remote-material3-samples",
     )
 
-    fun snapshotId(project: Project): String =
-        loadProps(project).getProperty("androidxSnapshotBuildId")
-            ?: error("androidxSnapshotBuildId missing from snapshots.properties")
+    fun snapshotId(project: Project): String {
+        val file = project.rootProject.layout.projectDirectory.file("snapshots.properties")
+        val contentProvider = project.providers.fileContents(file).asText
+        val content = contentProvider.orNull ?: error("No snapshots.properties found")
+        val props = Properties().apply { load(content.reader()) }
+        return props.getProperty("androidxSnapshotBuildId") ?: error("No androidxSnapshotBuildId in snapshots.properties")
+    }
 
     data class Coordinates(val group: String, val artifact: String) {
         override fun toString() = "$group:$artifact"
@@ -116,6 +135,21 @@ internal object SnapshotConfig {
         )
     }
 
+    private fun composeVersion(project: Project): String {
+        val file = project.rootProject.layout.projectDirectory.file("androidx/libraryversions.toml")
+        val contentProvider = project.providers.fileContents(file).asText
+        val text = contentProvider.orNull
+        if (text != null) {
+            val match = Regex("""COMPOSE\s*=\s*["']([^"']+)["']""").find(text)
+            if (match != null) {
+                val version = match.groupValues[1]
+                val baseVersion = version.substringBefore("-")
+                return "$baseVersion-SNAPSHOT"
+            }
+        }
+        return "1.0.0-SNAPSHOT"
+    }
+
     private fun coordinateFor(path: String): String = coordinatesFor(path).toString()
 
     /**
@@ -123,7 +157,7 @@ internal object SnapshotConfig {
      * that's the convention used by [Settings.kt][settings.gradle.kts]'s `stub()` helper.
      */
     private fun isStub(project: Project): Boolean {
-        val stubsDir = rootFile(project.rootProject, "stubs")
+        val stubsDir = project.rootProject.layout.projectDirectory.dir("stubs").asFile
         return generateSequence(project.projectDir) { it.parentFile }
             .any { it == stubsDir }
     }
@@ -140,12 +174,24 @@ internal object SnapshotConfig {
                     if (selector is ProjectComponentSelector) {
                         val target = project.rootProject.findProject(selector.projectPath)
                         if (target != null && isStub(target)) {
-                            val module = "${coordinateFor(selector.projectPath)}:1.0.0-SNAPSHOT"
+                            val coords = coordinatesFor(selector.projectPath)
+                            val version = if (coords.group.startsWith("androidx.compose") && !coords.group.startsWith("androidx.compose.remote")) {
+                                composeVersion(project)
+                            } else {
+                                "1.0.0-SNAPSHOT"
+                            }
+                            val module = "$coords:$version"
                             useTarget(module, "overlay: stub -> androidx.dev snapshot $buildId")
                         }
                     }
                 }
             }
         }
+    }
+}
+
+open class LintStub {
+    fun lint(block: groovy.lang.Closure<*>) {
+        // no-op
     }
 }
