@@ -1,0 +1,67 @@
+name: Bump androidx snapshot
+
+# Daily check for a newer androidx.dev snapshot build. androidchka resolves all
+# non-source androidx deps from the snapshot pinned in snapshots.properties; this
+# job runs scripts/bump-snapshot.sh (fetches the latest build id from
+# androidx.dev) and, when it changes, opens — or updates, on a fixed branch — a
+# PR with the bump. No-ops when already on the latest build.
+#
+# Requires the repo setting "Allow GitHub Actions to create and approve pull
+# requests" (Settings → Actions → General) so the workflow token can open the PR.
+# Note: a PR opened by GITHUB_TOKEN does not itself trigger other workflows (e.g.
+# Compile), so the bump PR won't be auto-compiled unless you swap in a PAT.
+
+on:
+  schedule:
+    - cron: '17 6 * * *'   # ~06:17 UTC daily
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# Don't overlap a scheduled run with a manual one.
+concurrency:
+  group: bump-androidx-snapshot
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Bump to latest androidx.dev snapshot
+        run: scripts/bump-snapshot.sh
+
+      - name: Read snapshot id
+        id: snap
+        run: |
+          set -euo pipefail
+          id="$(grep -E '^androidxSnapshotBuildId=' snapshots.properties | cut -d= -f2 | tr -d '[:space:]')"
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+
+      # Creates the PR on first change; updates the same branch/PR on later runs;
+      # no-ops when bump-snapshot.sh left the file unchanged (already on latest).
+      - name: Create or update bump PR
+        uses: peter-evans/create-pull-request@v7
+        with:
+          add-paths: snapshots.properties
+          branch: chore/bump-androidx-snapshot
+          base: main
+          delete-branch: true
+          commit-message: "chore: bump androidx.dev snapshot to ${{ steps.snap.outputs.id }}"
+          title: "chore: bump androidx.dev snapshot to ${{ steps.snap.outputs.id }}"
+          body: |
+            Automated daily bump of the androidx.dev snapshot build id in `snapshots.properties`
+            (the build all non-source androidx dependencies resolve against).
+
+            - New build id: `${{ steps.snap.outputs.id }}`
+            - Latest listed at https://androidx.dev/snapshots/builds
+
+            Opened/updated by the `Bump androidx snapshot` workflow on the fixed
+            `chore/bump-androidx-snapshot` branch — merge or close freely; the next daily run
+            re-opens it with the then-latest build id.
+          author: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+          committer: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
