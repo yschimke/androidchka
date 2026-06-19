@@ -135,19 +135,41 @@ internal object SnapshotConfig {
         )
     }
 
-    private fun composeVersion(project: Project): String {
+    private fun libraryVersionsToml(project: Project): String? {
         val file = project.rootProject.layout.projectDirectory.file("androidx/libraryversions.toml")
-        val contentProvider = project.providers.fileContents(file).asText
-        val text = contentProvider.orNull
-        if (text != null) {
-            val match = Regex("""COMPOSE\s*=\s*["']([^"']+)["']""").find(text)
-            if (match != null) {
-                val version = match.groupValues[1]
-                val baseVersion = version.substringBefore("-")
-                return "$baseVersion-SNAPSHOT"
-            }
+        return project.providers.fileContents(file).asText.orNull
+    }
+
+    /** Look up a `KEY = "x.y.z-..."` entry in the `[versions]` table. */
+    private fun versionEntry(toml: String, key: String): String? =
+        Regex("""(?m)^\s*${Regex.escape(key)}\s*=\s*["']([^"']+)["']""")
+            .find(toml)?.groupValues?.get(1)
+
+    /** Strip a release-channel suffix to the base x.y.z and append `-SNAPSHOT`. */
+    private fun baseSnapshot(version: String): String = "${version.substringBefore("-")}-SNAPSHOT"
+
+    private fun composeVersion(project: Project): String =
+        libraryVersionsToml(project)?.let { versionEntry(it, "COMPOSE") }?.let(::baseSnapshot)
+            ?: "1.0.0-SNAPSHOT"
+
+    /**
+     * Resolve the snapshot version for an `androidx.compose.*` group. Compose sub-libraries are
+     * versioned independently — e.g. `androidx.compose.material3` tracks `COMPOSE_MATERIAL3`
+     * (1.5.0-…), not the core `COMPOSE` (1.13.0-…), and the snapshot only publishes material3 under
+     * its own version. Honor the group's `atomicGroupVersion` from libraryversions.toml, falling
+     * back to the core COMPOSE version for groups that share it (ui/foundation/runtime/animation).
+     */
+    private fun composeGroupVersion(project: Project, group: String): String {
+        val toml = libraryVersionsToml(project) ?: return "1.0.0-SNAPSHOT"
+        val groupLine = toml.lineSequence().firstOrNull {
+            it.contains("group = \"$group\"") && it.contains("atomicGroupVersion")
         }
-        return "1.0.0-SNAPSHOT"
+        val key = groupLine?.let {
+            Regex("""atomicGroupVersion\s*=\s*["']versions\.([A-Za-z0-9_]+)["']""")
+                .find(it)?.groupValues?.get(1)
+        }
+        val version = key?.let { versionEntry(toml, it) } ?: versionEntry(toml, "COMPOSE")
+        return version?.let(::baseSnapshot) ?: "1.0.0-SNAPSHOT"
     }
 
     private fun coordinateFor(path: String): String = coordinatesFor(path).toString()
@@ -176,7 +198,7 @@ internal object SnapshotConfig {
                         if (target != null && isStub(target)) {
                             val coords = coordinatesFor(selector.projectPath)
                             val version = if (coords.group.startsWith("androidx.compose") && !coords.group.startsWith("androidx.compose.remote")) {
-                                composeVersion(project)
+                                composeGroupVersion(project, coords.group)
                             } else {
                                 "1.0.0-SNAPSHOT"
                             }
