@@ -34,6 +34,39 @@ afterEvaluate {
     }
 }
 
+// Robolectric APK-path fix. AGP writes module-relative paths into the generated
+// `com.android.tools.test_config.properties` (android_resource_apk / android_merged_manifest /
+// android_merged_assets), e.g. `../../../../build/androidx-builds/<flat>/intermediates/...`. Those
+// resolve correctly only when the module's buildDir sits under its own directory. This overlay
+// redirects buildDir out-of-tree (settings.gradle.kts -> build/androidx-builds/<flat>) and reaches
+// source modules through a symlink; the test JVM's working dir is the symlinked module path, which
+// the OS canonicalizes, so the `../../../../build` offset lands in the wrong tree and Robolectric
+// fails every test with PackageParserException ("Failed to parse ...apk-for-local-test.ap_").
+//
+// Rewrite those relative values to absolute after AGP generates the file. We normalize lexically
+// against the (symlinked) projectDir path via `Path.normalize()` — which strips `..` segments
+// WITHOUT resolving symlinks (unlike File.getCanonicalPath()) — so the result points at the real
+// redirected buildDir regardless of the test JVM's canonicalized working directory.
+run {
+    val projDirPath = projectDir.toPath()
+    tasks.matching { it.name.matches(Regex("generate.*UnitTestConfig")) }.configureEach {
+        doLast {
+            outputs.files.asFileTree.filter { it.name == "test_config.properties" }.forEach { f ->
+                val rewritten = f.readLines().joinToString("\n") { line ->
+                    val eq = line.indexOf('=')
+                    if (eq > 0 && line.substring(eq + 1).startsWith("../")) {
+                        line.substring(0, eq + 1) +
+                            projDirPath.resolve(line.substring(eq + 1)).normalize().toString()
+                    } else {
+                        line
+                    }
+                }
+                f.writeText(rewritten + "\n")
+            }
+        }
+    }
+}
+
 // Compose Preview: applied to every Android *source* module — the selection follows
 // `androidx.sources` (local.properties.example), not a hardcoded module list. This convention
 // plugin only ever runs on source projects (AndroidXPlugin applies it, and only a real upstream
