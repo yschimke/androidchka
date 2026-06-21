@@ -8,6 +8,7 @@ import org.gradle.api.Project
 import org.gradle.api.plugins.ExtensionAware
 import org.gradle.kotlin.dsl.getByType
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 
 /**
@@ -42,6 +43,16 @@ open class AndroidXMultiplatformExtension(internal val project: Project) {
                 group("jvmAndAndroid") {
                     withJvm()
                     withCompilations { it is KotlinMultiplatformAndroidCompilation }
+                }
+                // `nonJvmMain` (and its `web` subgroup for js/wasmJs) holds code shared by the
+                // non-JVM targets, which can't use the Java `remote-core`. Native targets, when
+                // declared, also fall under `nonJvm`.
+                group("nonJvm") {
+                    withNative()
+                    group("web") {
+                        withJs()
+                        withWasmJs()
+                    }
                 }
             }
         }
@@ -137,18 +148,15 @@ open class AndroidXMultiplatformExtension(internal val project: Project) {
         kotlin.sourceSets.maybeCreate("desktopTest")
     }
 
+    @OptIn(ExperimentalKotlinGradlePluginApi::class, ExperimentalWasmDsl::class)
     fun wasmJs() {
         ensureKmpApplied()
-        kotlin.sourceSets.maybeCreate("wasmJsMain")
-        kotlin.sourceSets.maybeCreate("wasmJsTest")
-        kotlin.sourceSets.maybeCreate("webTest")
+        kotlin.wasmJs { browser() }
     }
 
     fun js() {
         ensureKmpApplied()
-        kotlin.sourceSets.maybeCreate("jsMain")
-        kotlin.sourceSets.maybeCreate("jsTest")
-        kotlin.sourceSets.maybeCreate("webTest")
+        kotlin.js { browser() }
     }
 
     fun jvm(block: Closure<*>) {
