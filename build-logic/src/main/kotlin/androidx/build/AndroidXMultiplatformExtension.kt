@@ -8,6 +8,7 @@ import org.gradle.api.Project
 import org.gradle.api.plugins.ExtensionAware
 import org.gradle.kotlin.dsl.getByType
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 
 /**
@@ -43,9 +44,20 @@ open class AndroidXMultiplatformExtension(internal val project: Project) {
                     withJvm()
                     withCompilations { it is KotlinMultiplatformAndroidCompilation }
                 }
+                // `nonJvmMain` (and its `web` subgroup for js/wasmJs) holds code shared by the
+                // non-JVM targets, which can't use the Java `remote-core`. Native targets, when
+                // declared, also fall under `nonJvm`. The template only materializes these source
+                // sets when a matching target is actually declared, so android+jvm-only modules are
+                // unaffected (no orphan `nonJvmMain`); hence no unconditional `maybeCreate` here.
+                group("nonJvm") {
+                    withNative()
+                    group("web") {
+                        withJs()
+                        withWasmJs()
+                    }
+                }
             }
         }
-        kotlin.sourceSets.maybeCreate("nonJvmMain")
     }
 
     private val kotlin: KotlinMultiplatformExtension
@@ -137,18 +149,15 @@ open class AndroidXMultiplatformExtension(internal val project: Project) {
         kotlin.sourceSets.maybeCreate("desktopTest")
     }
 
+    @OptIn(ExperimentalKotlinGradlePluginApi::class, ExperimentalWasmDsl::class)
     fun wasmJs() {
         ensureKmpApplied()
-        kotlin.sourceSets.maybeCreate("wasmJsMain")
-        kotlin.sourceSets.maybeCreate("wasmJsTest")
-        kotlin.sourceSets.maybeCreate("webTest")
+        kotlin.wasmJs { browser() }
     }
 
     fun js() {
         ensureKmpApplied()
-        kotlin.sourceSets.maybeCreate("jsMain")
-        kotlin.sourceSets.maybeCreate("jsTest")
-        kotlin.sourceSets.maybeCreate("webTest")
+        kotlin.js { browser() }
     }
 
     fun jvm(block: Closure<*>) {
