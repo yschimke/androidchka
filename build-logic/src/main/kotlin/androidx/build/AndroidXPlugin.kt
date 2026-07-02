@@ -153,13 +153,15 @@ internal object SnapshotConfig {
             ?: "1.0.0-SNAPSHOT"
 
     /**
-     * Resolve the snapshot version for an `androidx.compose.*` group. Compose sub-libraries are
-     * versioned independently — e.g. `androidx.compose.material3` tracks `COMPOSE_MATERIAL3`
-     * (1.5.0-…), not the core `COMPOSE` (1.13.0-…), and the snapshot only publishes material3 under
-     * its own version. Honor the group's `atomicGroupVersion` from libraryversions.toml, falling
-     * back to the core COMPOSE version for groups that share it (ui/foundation/runtime/animation).
+     * Resolve the snapshot version for an androidx group. Libraries are versioned independently —
+     * e.g. `androidx.compose.material3` tracks `COMPOSE_MATERIAL3` (1.5.0-…), not the core
+     * `COMPOSE` (1.13.0-…), and `androidx.concurrent` tracks `FUTURES` (1.4.0-…) — and the
+     * snapshot repo only publishes each artifact under its own version. Honor the group's
+     * `atomicGroupVersion` from libraryversions.toml; compose groups without one share the core
+     * COMPOSE version (ui/foundation/runtime/animation). Anything unresolved falls back to
+     * `1.0.0-SNAPSHOT`.
      */
-    private fun composeGroupVersion(project: Project, group: String): String {
+    private fun groupVersion(project: Project, group: String): String {
         val toml = libraryVersionsToml(project) ?: return "1.0.0-SNAPSHOT"
         val groupLine = toml.lineSequence().firstOrNull {
             it.contains("group = \"$group\"") && it.contains("atomicGroupVersion")
@@ -168,7 +170,8 @@ internal object SnapshotConfig {
             Regex("""atomicGroupVersion\s*=\s*["']versions\.([A-Za-z0-9_]+)["']""")
                 .find(it)?.groupValues?.get(1)
         }
-        val version = key?.let { versionEntry(toml, it) } ?: versionEntry(toml, "COMPOSE")
+        val version = key?.let { versionEntry(toml, it) }
+            ?: if (group.startsWith("androidx.compose")) versionEntry(toml, "COMPOSE") else null
         return version?.let(::baseSnapshot) ?: "1.0.0-SNAPSHOT"
     }
 
@@ -197,10 +200,13 @@ internal object SnapshotConfig {
                         val target = project.rootProject.findProject(selector.projectPath)
                         if (target != null && isStub(target)) {
                             val coords = coordinatesFor(selector.projectPath)
-                            val version = if (coords.group.startsWith("androidx.compose") && !coords.group.startsWith("androidx.compose.remote")) {
-                                composeGroupVersion(project, coords.group)
-                            } else {
+                            // compose.remote groups are the overlay's own source projects (pinned
+                            // to 1.0.0-SNAPSHOT for substitution); everything else resolves its
+                            // real snapshot version from libraryversions.toml.
+                            val version = if (coords.group.startsWith("androidx.compose.remote")) {
                                 "1.0.0-SNAPSHOT"
+                            } else {
+                                groupVersion(project, coords.group)
                             }
                             val module = "$coords:$version"
                             useTarget(module, "overlay: stub -> androidx.dev snapshot $buildId")
