@@ -32,6 +32,14 @@ afterEvaluate {
             sourceSets.getByName("test").assets.srcDir(project.files(goldenDir))
         }
     }
+    // Application modules (e.g. integration-test apps) carry their screenshot goldens in the
+    // androidTest APK too — mirror upstream's addGoldenImageAssets() for them.
+    pluginManager.withPlugin("com.android.application") {
+        extensions.configure<com.android.build.api.dsl.ApplicationExtension>("android") {
+            sourceSets.getByName("androidTest").assets.srcDir(project.files(goldenDir))
+            sourceSets.getByName("test").assets.srcDir(project.files(goldenDir))
+        }
+    }
 }
 
 // Robolectric APK-path fix. AGP writes module-relative paths into the generated
