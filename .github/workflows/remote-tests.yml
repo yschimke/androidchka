@@ -1,0 +1,122 @@
+name: Remote Tests
+
+# Runs the remote compose test suites from the AndroidX checkout against the
+# pinned androidx.dev snapshot — JVM unit tests plus the player-view
+# instrumentation tests on an emulator. Dispatch with a repo/ref to test an
+# in-flight AndroidX branch (e.g. a remote-core fix) through the overlay.
+
+on:
+  workflow_dispatch:
+    inputs:
+      androidx-repo:
+        description: AndroidX repository to check out
+        default: yschimke/androidx
+        type: string
+      androidx-ref:
+        description: AndroidX ref to test
+        default: claude/androidchka-update-rrjm8a
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout androidchka
+        uses: actions/checkout@v4
+
+      - name: Checkout androidx source
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.androidx-repo }}
+          ref: ${{ inputs.androidx-ref }}
+          path: .androidx-src
+          fetch-depth: 1
+
+      - name: Wire androidx symlink
+        run: ln -sfn .androidx-src androidx
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      # remote-core is a plain java-library (task `test`); remote-creation is KMP
+      # (task `jvmTest`, hosts the LayoutTest/LayoutCollapsibleTest golden suites).
+      - name: Run unit tests
+        run: >
+          ./gradlew
+          :compose:remote:remote-core:test
+          :compose:remote:remote-creation:jvmTest
+          --continue --stacktrace
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-reports
+          path: |
+            build/androidx-builds/**/reports/tests/**
+            build/androidx-builds/**/test-results/**
+          if-no-files-found: ignore
+
+  instrumentation-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout androidchka
+        uses: actions/checkout@v4
+
+      - name: Checkout androidx source
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.androidx-repo }}
+          ref: ${{ inputs.androidx-ref }}
+          path: .androidx-src
+          fetch-depth: 1
+
+      - name: Wire androidx symlink
+        run: ln -sfn .androidx-src androidx
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run player-view instrumentation tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          script: >
+            ./gradlew
+            :compose:remote:remote-player-view:connectedDebugAndroidTest
+            --stacktrace
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: instrumentation-test-reports
+          path: |
+            build/androidx-builds/**/reports/androidTests/**
+            build/androidx-builds/**/outputs/androidTest-results/**
+          if-no-files-found: ignore
