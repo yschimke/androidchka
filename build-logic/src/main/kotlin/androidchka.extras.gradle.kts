@@ -38,6 +38,11 @@ afterEvaluate {
         extensions.configure<com.android.build.api.dsl.ApplicationExtension>("android") {
             sourceSets.getByName("androidTest").assets.srcDir(project.files(goldenDir))
             sourceSets.getByName("test").assets.srcDir(project.files(goldenDir))
+            // Software-emulated (TCG) devices can take longer than ddmlib's default 5s to
+            // answer the property fetch AGP uses for its device-compatibility check; a slow
+            // answer makes the device read as "not compatible". AGP feeds this value into
+            // DdmPreferences.setTimeOut, so raise it well past TCG shell latency.
+            installation.timeOutInMs = 10 * 60 * 1000
         }
     }
 }
