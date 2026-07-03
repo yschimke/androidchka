@@ -6,6 +6,8 @@ name: Remote Tests
 # in-flight AndroidX branch (e.g. a remote-core fix) through the overlay.
 
 on:
+  push:
+    branches: [claude/androidchka-update-rrjm8a]
   workflow_dispatch:
     inputs:
       androidx-repo:
@@ -16,6 +18,10 @@ on:
         description: AndroidX ref to test
         default: claude/androidchka-update-rrjm8a
         type: string
+
+env:
+  ANDROIDX_REPO: ${{ inputs.androidx-repo || 'yschimke/androidx' }}
+  ANDROIDX_REF: ${{ inputs.androidx-ref || 'claude/androidchka-update-rrjm8a' }}
 
 permissions:
   contents: read
@@ -30,8 +36,8 @@ jobs:
       - name: Checkout androidx source
         uses: actions/checkout@v4
         with:
-          repository: ${{ inputs.androidx-repo }}
-          ref: ${{ inputs.androidx-ref }}
+          repository: ${{ env.ANDROIDX_REPO }}
+          ref: ${{ env.ANDROIDX_REF }}
           path: .androidx-src
           fetch-depth: 1
 
@@ -75,8 +81,8 @@ jobs:
       - name: Checkout androidx source
         uses: actions/checkout@v4
         with:
-          repository: ${{ inputs.androidx-repo }}
-          ref: ${{ inputs.androidx-ref }}
+          repository: ${{ env.ANDROIDX_REPO }}
+          ref: ${{ env.ANDROIDX_REF }}
           path: .androidx-src
           fetch-depth: 1
 
