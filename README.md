@@ -107,6 +107,14 @@ scripts/bump-snapshot.sh 13530000  # specific build id
 ./gradlew --refresh-dependencies :wear:compose:remote:remote-material3:assembleDebug
 ```
 
+## Running device tests without KVM
+
+Instrumentation tests on a software-emulated (TCG) emulator — as found in
+cloud containers and CI runners without `/dev/kvm` — need a specific
+playbook: lean system images, watchdog/timeout tuning, and bypassing
+Gradle's ddmlib device pipeline. See
+[docs/EMULATOR_WITHOUT_KVM.md](docs/EMULATOR_WITHOUT_KVM.md).
+
 ## Caveats
 
 - The `androidx { }` extension is a no-op; samples wiring, golden-image
