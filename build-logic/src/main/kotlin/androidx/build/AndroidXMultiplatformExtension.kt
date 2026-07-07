@@ -76,7 +76,7 @@ open class AndroidXMultiplatformExtension(internal val project: Project) {
         val target = (kotlin as ExtensionAware).extensions.getByType(
             KotlinMultiplatformAndroidLibraryTarget::class.java
         )
-        target.compileSdk = 37
+        target.compileSdk = AndroidxSdkConfig.defaultCompileSdk(project)
         configure(target, block)
         // Auto-enable host & device test compilations when the matching source dirs exist on
         // disk — upstream's projects expect `androidUnitTest` / `androidDeviceTest` source sets

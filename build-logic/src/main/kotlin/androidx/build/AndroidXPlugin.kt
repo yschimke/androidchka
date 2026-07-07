@@ -63,7 +63,7 @@ class AndroidXPlugin : Plugin<Project> {
         // on the `kotlin` extension.
         project.pluginManager.withPlugin("com.android.library") {
             project.extensions.configure<LibraryExtension>("android") {
-                compileSdk = 37
+                compileSdk = AndroidxSdkConfig.defaultCompileSdk(project)
                 compileOptions {
                     sourceCompatibility = org.gradle.api.JavaVersion.VERSION_17
                     targetCompatibility = org.gradle.api.JavaVersion.VERSION_17
@@ -89,6 +89,29 @@ class AndroidXPlugin : Plugin<Project> {
         // dependencies, task tweaks). Applied to every source project; see
         // build-logic/src/main/kotlin/androidchka.extras.gradle.kts.
         project.pluginManager.apply("androidchka.extras")
+    }
+}
+
+/**
+ * The overlay's default `compileSdk`, read from the androidx checkout's `androidx.compileSdk`
+ * gradle property — the same value upstream's `AndroidXImplPlugin` feeds to every module via
+ * `compileSdk { version = release(defaultAndroidConfig.compileSdk) }`. Modules that need a newer
+ * API level override it with their own `compileSdk { version = release(N) }` block, exactly as they
+ * do upstream.
+ *
+ * Hardcoding a single number here (previously 37) diverged from androidx: unpinned modules landed on
+ * 37 while their consumers pin the androidx default (e.g. `remote-creation` at 37 vs `remote-testing`
+ * pinning `release(35)`), so AAR-metadata checks failed. Sourcing the default from androidx keeps the
+ * overlay consistent with whatever compileSdk the checkout builds against.
+ */
+internal object AndroidxSdkConfig {
+    fun defaultCompileSdk(project: Project): Int {
+        val file = project.rootProject.layout.projectDirectory.file("androidx/gradle.properties")
+        val content = project.providers.fileContents(file).asText.orNull
+            ?: error("Cannot read androidx/gradle.properties (is the `androidx` symlink set?)")
+        val props = Properties().apply { load(content.reader()) }
+        return props.getProperty("androidx.compileSdk")?.trim()?.toInt()
+            ?: error("androidx.compileSdk missing from androidx/gradle.properties")
     }
 }
 
